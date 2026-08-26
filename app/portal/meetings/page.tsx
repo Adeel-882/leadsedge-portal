@@ -1,0 +1,3 @@
+export default function ClientMeetingsPage() {
+  return <div><p className="page-eyebrow">Coming in Phase 2</p><h1 className="page-title">Meetings</h1><p className="page-subtitle">Scheduling will be available here soon.</p><div className="card mt-7 p-7 text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#e8f5f2] text-2xl text-teal">□</div><h2 className="mt-4 text-lg font-bold">No meetings to show</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">When booking is introduced, you will be able to choose a time with your project owner directly from your phone.</p></div></div>;
+}
