@@ -2,36 +2,39 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { Bell, CalendarDots, CaretRight, ChatsCircle, SquaresFour, Stack } from '@phosphor-icons/react';
 import { Brand } from '@/components/brand';
+import { useUnreadCounts } from '@/components/unread-counts';
 import { initials } from '@/lib/format';
 
 const items = [
-  { href: '/admin', label: 'Dashboard', icon: '▦' },
-  { href: '/admin/templates', label: 'Templates', icon: '▤' },
-  { href: '/admin/meetings', label: 'Meetings', icon: '□', soon: true },
-  { href: '/admin/messages', label: 'Messages', icon: '◇' },
+  { href: '/admin', label: 'Dashboard', Icon: SquaresFour },
+  { href: '/admin/templates', label: 'Templates', Icon: Stack },
+  { href: '/admin/meetings', label: 'Meetings', Icon: CalendarDots },
+  { href: '/admin/messages', label: 'Messages', Icon: ChatsCircle },
 ];
 
-export function AdminShell({ children, displayName, unreadCount }: { children: React.ReactNode; displayName: string; unreadCount: number }) {
+export function AdminShell({ children, displayName, viewerId, messageUnreadCount, notificationUnreadCount }: { children: React.ReactNode; displayName: string; viewerId: string; messageUnreadCount: number; notificationUnreadCount: number }) {
   const pathname = usePathname();
+  const unread = useUnreadCounts(viewerId, messageUnreadCount, notificationUnreadCount);
   return <div className="min-h-screen bg-canvas text-ink">
     <aside className="admin-sidebar">
-      <Brand href="/admin" />
+      <div className="sidebar-brand"><Brand href="/admin" /></div>
       <p className="nav-eyebrow">Workspace</p>
       <nav className="space-y-1">
         {items.map((item) => {
           const active = item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href);
-          return <Link key={item.href} href={item.href} className={`nav-link ${active ? 'nav-link-active' : ''}`}><span aria-hidden>{item.icon}</span><span>{item.label}</span>{item.soon && <span className="soon-pill">Soon</span>}{item.label === 'Messages' && unreadCount > 0 && <span className="unread-pill">{unreadCount}</span>}</Link>;
+          return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={`nav-link ${active ? 'nav-link-active' : ''}`}><item.Icon size={18} weight={active ? 'fill' : 'regular'} aria-hidden /><span>{item.label}</span>{item.label === 'Messages' && unread.messages > 0 && <span className="unread-pill">{unread.messages}</span>}</Link>;
         })}
       </nav>
-      <div className="mt-auto border-t border-line pt-5">
-        <Link href="/admin/settings" className="profile-link"><span className="avatar avatar-navy">{initials(displayName)}</span><span className="min-w-0"><span className="block truncate text-sm font-semibold">{displayName}</span><span className="block text-xs text-muted">Administrator</span></span><span className="ml-auto">›</span></Link>
+      <div className="sidebar-profile mt-auto">
+        <Link href="/admin/settings" className="profile-link"><span className="avatar avatar-navy">{initials(displayName)}</span><span className="min-w-0"><span className="block truncate text-[13px] font-semibold">{displayName}</span><span className="block text-[11px] text-muted">Administrator</span></span><CaretRight className="ml-auto text-muted" size={15} aria-hidden /></Link>
       </div>
     </aside>
-    <div className="lg:pl-[248px]">
-      <header className="topbar"><div className="lg:hidden"><Brand href="/admin" /></div><div className="hidden lg:block"><p className="text-xs text-muted">Admin workspace</p><p className="font-semibold">Leadsedge Portal</p></div><div className="flex items-center gap-2"><Link href="/admin/notifications" aria-label="Notifications" className="notification-button">♧{unreadCount > 0 && <span>{unreadCount}</span>}</Link><Link href="/admin/settings" className="avatar avatar-navy">{initials(displayName)}</Link></div></header>
+    <div className="admin-content">
+      <header className="topbar"><div className="lg:hidden"><Brand href="/admin" /></div><div className="topbar-context"><p className="text-[11px] text-muted">Admin workspace</p><p className="text-[13px] font-semibold">Leadsedge Portal</p></div><div className="topbar-actions"><Link href="/admin/notifications" aria-label={`Notifications${unread.notifications ? ` (${unread.notifications} unread)` : ''}`} className="notification-button"><Bell size={19} weight="regular" aria-hidden />{unread.notifications > 0 && <span>{unread.notifications}</span>}</Link><Link href="/admin/settings" aria-label="Administrator settings" className="avatar avatar-navy">{initials(displayName)}</Link></div></header>
       {children}
-      <nav className="mobile-admin-nav">{items.map((item) => <Link key={item.href} href={item.href} className={(item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href)) ? 'active' : ''}><span>{item.icon}</span><small>{item.label}</small></Link>)}</nav>
+      <nav className="mobile-admin-nav" aria-label="Admin navigation">{items.map((item) => { const active = item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href); return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={active ? 'active' : ''}><item.Icon size={20} weight={active ? 'fill' : 'regular'} aria-hidden />{item.label === 'Messages' && unread.messages > 0 && <span className="mobile-nav-badge">{unread.messages}</span>}<small>{item.label}</small></Link>; })}</nav>
     </div>
   </div>;
 }

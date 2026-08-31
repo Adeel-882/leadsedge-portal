@@ -9,7 +9,8 @@ export async function PATCH(_request: Request, { params }: { params: Promise<{ n
   if (isDemoMode()) return NextResponse.json({ ok: true });
   const { notificationId } = await params;
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase!.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', notificationId).eq('user_id', viewer.id);
+  const { data, error } = await supabase!.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', notificationId).eq('user_id', viewer.id).select('id').maybeSingle();
   if (error) return NextResponse.json({ error: 'Notification could not be updated.' }, { status: 500 });
+  if (!data) return NextResponse.json({ error: 'Notification not found.' }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

@@ -1,18 +1,50 @@
 import Link from 'next/link';
+import { ArrowRight, CalendarBlank, ChatCircleDots, CheckCircle, ClipboardText, Sparkle } from '@phosphor-icons/react/dist/ssr';
 import { requireRole } from '@/lib/auth';
-import { formatTime } from '@/lib/format';
-import { getClientProjects, getNotifications, getProjectTasks } from '@/lib/queries';
+import { formatDate, formatTime } from '@/lib/format';
+import { getNextMeeting } from '@/lib/meetings';
+import { getClientProjects, getClientTaskList, getNotifications, getUnreadCounts } from '@/lib/queries';
 
 export default async function ClientHomePage() {
-  const [viewer, projects, notifications] = await Promise.all([requireRole('client'), getClientProjects(), getNotifications()]);
+  const [viewer, projects, notifications, nextMeeting, unread, allTasks] = await Promise.all([
+    requireRole('client'),
+    getClientProjects(),
+    getNotifications(5),
+    getNextMeeting(),
+    getUnreadCounts(),
+    getClientTaskList(),
+  ]);
   const primary = projects[0];
-  const tasks = primary ? await getProjectTasks(primary.id, true) : [];
+  const tasks = primary ? allTasks.filter((task) => task.projectId === primary.id) : [];
   const active = tasks.filter((task) => task.status === 'active');
-  const completed = tasks.filter((task) => task.status === 'completed');
-  return <div><section className="rounded-3xl bg-[#123b53] px-5 py-8 text-white shadow-[0_20px_45px_rgba(16,48,69,.16)] md:px-9 md:py-10"><p className="text-sm text-[#b8d8df]">Welcome back</p><h1 className="mt-2 text-3xl font-bold tracking-[-.03em] md:text-4xl">{viewer.fullName}</h1><p className="mt-3 max-w-xl text-sm leading-6 text-[#d6e5e9]">Everything for {primary?.projectName || 'your project'} lives here—tasks, details, and conversations.</p>{primary && <Link className="mt-6 inline-flex rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-[#123b53]" href="/portal/tasks">View active tasks</Link>}</section>
-    <section className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4"><PortalMetric value={active.length} label="Active tasks" tone="teal" /><PortalMetric value={completed.length} label="Completed" tone="blue" /><PortalMetric value={notifications.filter((item) => !item.readAt).length} label="Unread" tone="amber" /><PortalMetric value="—" label="Meetings soon" tone="gray" /></section>
-    <div className="mt-7 grid gap-5 lg:grid-cols-[1.2fr_.8fr]"><section className="card p-5"><div className="flex items-center justify-between"><div><h2 className="text-lg font-bold">Your next tasks</h2><p className="mt-1 text-sm text-muted">Open a lead to see every detail.</p></div><Link href="/portal/tasks" className="text-sm font-semibold text-teal">View all</Link></div><div className="mt-4 divide-y divide-line">{active.slice(0, 3).map((task) => <Link href={`/portal/tasks/${task.id}`} key={task.id} className="flex items-center gap-3 py-4"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f5f2] text-teal">✓</span><span className="min-w-0"><b className="block truncate text-sm">{task.title}</b><span className="mt-1 block text-xs text-muted">Tap to view lead details</span></span><span className="ml-auto text-muted">›</span></Link>)}{!active.length && <p className="py-8 text-center text-sm text-muted">No active tasks right now.</p>}</div></section><section className="card p-5"><h2 className="text-lg font-bold">Recent activity</h2><div className="mt-4 space-y-4">{notifications.slice(0, 4).map((item) => <div key={item.id} className="flex gap-3"><span className="mt-1 h-2.5 w-2.5 flex-none rounded-full bg-teal" /><div><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-xs leading-5 text-muted">{item.body}</p><p className="mt-1 text-[11px] text-muted">{formatTime(item.createdAt)}</p></div></div>)}</div></section></div>
+  const feedbackTask = tasks.find((task) => task.feedbackState === 'requested');
+
+  return <div>
+    <header className="page-header flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div><p className="page-eyebrow">Welcome back, {viewer.fullName}</p><h1 className="page-title">Here is what needs your attention</h1><p className="page-subtitle">Your leads, feedback, messages, and meetings for {primary?.projectName || 'your workspace'}.</p></div>
+      {primary && <Link href="/portal/tasks" className="button-primary">Open tasks<ArrowRight size={15} aria-hidden /></Link>}
+    </header>
+
+    <section className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,.6fr)]" aria-label="Priority actions">
+      <div className="surface-flat p-5 sm:p-6">
+        <div className="flex items-center gap-2 text-teal"><ClipboardText size={18} weight="fill" aria-hidden /><p className="text-xs font-semibold">Active lead</p></div>
+        {active[0] ? <><h2 className="mt-3 text-xl font-bold tracking-[-.025em]">{active[0].title}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-muted">Review the lead details, continue the conversation, or mark the assignment complete when the work is finished.</p><Link href={`/portal/tasks/${active[0].id}`} className="button-secondary mt-5">View lead<ArrowRight size={14} aria-hidden /></Link></> : <><h2 className="mt-3 text-lg font-bold">No active lead right now</h2><p className="mt-2 text-sm text-muted">Your next assignment will appear here when it is ready.</p></>}
+      </div>
+
+      <div className={`surface-flat p-5 ${feedbackTask ? 'border-[#d9c18c] bg-[#fcf8ee]' : ''}`}>
+        <div className="flex items-center gap-2 text-muted"><Sparkle size={18} aria-hidden /><p className="text-xs font-semibold">Feedback</p></div>
+        {feedbackTask ? <><h2 className="mt-3 text-lg font-bold">Feedback requested</h2><p className="mt-2 text-sm leading-6 text-muted">Your feedback form is ready inside {feedbackTask.title}.</p><Link href={`/portal/tasks/${feedbackTask.id}`} className="button-primary mt-5">Give feedback</Link></> : <><CheckCircle className="mt-4 text-teal" size={24} weight="fill" aria-hidden /><h2 className="mt-2 text-base font-bold">Nothing pending</h2><p className="mt-1 text-sm text-muted">No feedback is due.</p></>}
+      </div>
+    </section>
+
+    <section className="mt-3 grid gap-3 sm:grid-cols-2" aria-label="Messages and meetings">
+      <Link href="/portal/messages" className="surface-flat flex items-center gap-4 p-5 transition hover:border-[#b7c8c3] hover:bg-[#f9fbfa]"><span className="grid h-10 w-10 place-items-center rounded-lg bg-[#e6f1ef] text-teal"><ChatCircleDots size={20} weight="fill" aria-hidden /></span><div><p className="text-sm font-bold">Messages</p><p className="mt-1 text-xs text-muted">{unread.messages ? `${unread.messages} unread ${unread.messages === 1 ? 'message' : 'messages'}` : 'No unread messages'}</p></div><ArrowRight className="ml-auto text-muted" size={16} aria-hidden /></Link>
+      <Link href={nextMeeting ? `/portal/meetings/${nextMeeting.id}` : '/portal/meetings'} className="surface-flat flex items-center gap-4 p-5 transition hover:border-[#b7c8c3] hover:bg-[#f9fbfa]"><span className="grid h-10 w-10 place-items-center rounded-lg bg-[#eaf0f4] text-[#3c5f77]"><CalendarBlank size={20} weight="fill" aria-hidden /></span><div><p className="text-sm font-bold">{nextMeeting ? 'Upcoming meeting' : 'Schedule a meeting'}</p><p className="mt-1 text-xs text-muted">{nextMeeting ? formatDate(nextMeeting.startAt, { dateStyle: 'medium', timeStyle: 'short', timeZone: nextMeeting.timezone }) : 'Choose an available time with your project owner'}</p></div><ArrowRight className="ml-auto text-muted" size={16} aria-hidden /></Link>
+    </section>
+
+    <section className="surface-flat mt-4 overflow-hidden">
+      <div className="border-b border-line px-5 py-4"><h2 className="section-title">Recent activity</h2><p className="section-description">The latest updates from your workspace.</p></div>
+      {notifications.length ? <div>{notifications.map((item) => <Link href={item.targetUrl.startsWith('/') && !item.targetUrl.startsWith('//') ? item.targetUrl : '/portal'} key={item.id} className="flex gap-3 border-b border-line px-5 py-4 last:border-b-0 hover:bg-[#f8faf9]"><span className={`mt-1.5 h-2 w-2 flex-none rounded-full ${item.readAt ? 'bg-[#cbd4d1]' : 'bg-teal'}`} aria-hidden /><div className="min-w-0"><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-sm leading-5 text-muted">{item.body}</p><p className="mt-1.5 text-[11px] text-muted">{formatTime(item.createdAt)}</p></div></Link>)}</div> : <p className="px-5 py-7 text-sm text-muted">No recent activity yet.</p>}
+    </section>
   </div>;
 }
-
-function PortalMetric({ value, label, tone }: { value: number | string; label: string; tone: 'teal' | 'blue' | 'amber' | 'gray' }) { const classes = { teal: 'bg-[#e6f7f3] text-[#0a7067]', blue: 'bg-[#eaf1fb] text-[#3c5f91]', amber: 'bg-[#fff4df] text-[#8b6116]', gray: 'bg-[#eef1f4] text-[#627084]' }; return <div className={`rounded-2xl p-4 ${classes[tone]}`}><b className="text-2xl">{value}</b><p className="mt-1 text-xs font-semibold">{label}</p></div>; }

@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
-import { getViewer } from '@/lib/auth';
-import { isDemoMode } from '@/lib/env';
+import { administratorExists, getViewer } from '@/lib/auth';
+import { hasServiceRoleEnv, isDemoMode } from '@/lib/env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { profileSchema } from '@/lib/validation';
 
 export async function POST(request: Request) {
   if (isDemoMode()) return NextResponse.json({ error: 'Connect Supabase before administrator setup.' }, { status: 400 });
+  if (!hasServiceRoleEnv()) return NextResponse.json({ error: 'Supabase server configuration is incomplete.' }, { status: 503 });
+  const adminExists = await administratorExists();
+  if (adminExists === null) return NextResponse.json({ error: 'Administrator setup could not be verified.' }, { status: 503 });
+  if (adminExists) return NextResponse.json({ error: 'An administrator already exists.' }, { status: 409 });
   const viewer = await getViewer();
   if (!viewer) return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
   const parsed = profileSchema.safeParse(await request.json().catch(() => null));

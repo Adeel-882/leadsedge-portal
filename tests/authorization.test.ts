@@ -9,7 +9,7 @@ describe('client task authorization', () => {
 
   it('rejects a different client and draft tasks', () => {
     expect(canClientAccessTask(demoTasks[0], '00000000-0000-4000-8000-999999999999')).toBe(false);
-    expect(canClientAccessTask(demoTasks[1], demoClient.id)).toBe(false);
+    expect(canClientAccessTask({ ...demoTasks[0], status: 'draft' }, demoClient.id)).toBe(false);
   });
 
   it('only permits completion when all task rules are satisfied', () => {

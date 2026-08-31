@@ -6,5 +6,5 @@ export default async function ProjectLayout({ children, params }: { children: Re
   const { projectId } = await params;
   const project = await getProject(projectId);
   if (!project) notFound();
-  return <><ProjectTabs projectId={project.id} projectName={project.projectName} clientName={project.clientName} />{children}</>;
+  return <><ProjectTabs projectId={project.id} projectName={project.projectName} clientName={project.clientName} ownerName={project.ownerName} status={project.status} />{children}</>;
 }

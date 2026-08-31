@@ -15,7 +15,18 @@ export async function proxy(request: NextRequest) {
       },
     },
   });
-  await supabase.auth.getUser();
+  // This proxy exists only to keep the session cookie fresh. It is deliberately
+  // NOT an authorization boundary: every route resolves the viewer through
+  // requireRole()/getViewer(), which call the authoritative auth.getUser().
+  //
+  // getSession() reads the session from the request cookies with no network
+  // call, and refreshes through the refresh token when the access token is at
+  // or near expiry. Both outcomes are persisted the same way getUser() would
+  // persist them, because @supabase/ssr writes cookies from the TOKEN_REFRESHED
+  // and SIGNED_OUT events rather than from any particular auth method. Dropping
+  // getUser() here removes a redundant round trip to the auth server that every
+  // request paid before rendering, without changing what refreshes or when.
+  await supabase.auth.getSession();
   return response;
 }
 

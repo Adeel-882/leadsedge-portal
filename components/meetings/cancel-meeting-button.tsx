@@ -1,0 +1,11 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { X } from '@phosphor-icons/react';
+
+export function CancelMeetingButton({ meetingId }: { meetingId: string }) {
+  const router = useRouter(); const [open, setOpen] = useState(false); const [reason, setReason] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  async function cancel() { setBusy(true); setError(''); const response = await fetch(`/api/meetings/${meetingId}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) }); const result = await response.json() as { error?: string; destination?: string }; if (!response.ok) { setError(result.error || 'Meeting could not be cancelled.'); setBusy(false); return; } setOpen(false); router.push(result.destination || '/'); router.refresh(); }
+  return <>{<button className="button-danger" onClick={() => setOpen(true)}>Cancel meeting</button>}{open && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="cancel-meeting-title"><div className="modal-card max-w-lg"><div className="flex items-start justify-between"><div><p className="page-eyebrow">Confirmation</p><h2 id="cancel-meeting-title" className="text-xl font-bold">Cancel this meeting?</h2></div><button aria-label="Close" className="button-ghost h-9 w-9 p-0" onClick={() => setOpen(false)}><X size={18} aria-hidden /></button></div><p className="mt-3 text-sm leading-6 text-muted">Both participants will be notified. The linked Google Calendar event will also be removed when connected.</p><label className="mt-5 block"><span className="field-label">Reason (optional)</span><textarea className="field-textarea" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} /></label>{error && <p role="alert" className="mt-3 text-sm text-[#b33e3e]">{error}</p>}<div className="mt-5 flex justify-end gap-3"><button className="button-secondary" onClick={() => setOpen(false)}>Keep meeting</button><button className="button-danger" disabled={busy} onClick={cancel}>{busy ? 'Cancelling...' : 'Cancel meeting'}</button></div></div></div>}</>;
+}

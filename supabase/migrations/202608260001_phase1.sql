@@ -227,7 +227,7 @@ begin
   values (
     new.id,
     new.email,
-    case when new.raw_user_meta_data ->> 'role' = 'admin' then 'admin'::public.user_role else 'client'::public.user_role end,
+    'client'::public.user_role,
     coalesce(nullif(new.raw_user_meta_data ->> 'full_name', ''), split_part(new.email, '@', 1))
   )
   on conflict (id) do update set email = excluded.email, full_name = excluded.full_name;
@@ -297,7 +297,8 @@ returns void language plpgsql security definer set search_path = public
 as $$
 begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
-  if exists(select 1 from public.users where role = 'admin' and id <> auth.uid()) then raise exception 'An administrator already exists'; end if;
+  perform pg_advisory_xact_lock(hashtext('leadsedge.setup_first_admin'));
+  if exists(select 1 from public.users where role = 'admin') then raise exception 'An administrator already exists'; end if;
   update public.users set role = 'admin', full_name = trim(display_name) where id = auth.uid();
   insert into public.admin_settings(user_id, display_name, timezone)
   values (auth.uid(), trim(display_name), admin_timezone)

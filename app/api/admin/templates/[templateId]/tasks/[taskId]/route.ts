@@ -5,7 +5,8 @@ import { isDemoMode } from '@/lib/env';
 import { sanitizeTaskDescription } from '@/lib/queries';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-const updateSchema = z.object({ title: z.string().trim().min(2).max(180), description: z.string().max(40000), taskType: z.enum(['standard', 'form']), clientVisible: z.boolean(), requiresCompletion: z.boolean(), formSchema: z.array(z.object({ id: z.string(), label: z.string(), type: z.enum(['text', 'textarea', 'radio']), required: z.boolean().optional(), options: z.array(z.string()).optional() })).nullable() });
+const formField = z.object({ id: z.string().min(1), label: z.string().min(1), type: z.enum(['text', 'textarea', 'radio', 'select', 'checkbox']), required: z.boolean().optional(), options: z.array(z.string()).optional() });
+const updateSchema = z.object({ title: z.string().trim().min(2).max(180), description: z.string().max(40000), clientVisible: z.boolean(), requiresCompletion: z.boolean(), formSchema: z.array(formField).min(1), feedbackEnabled: z.boolean(), feedbackDelayValue: z.number().int().min(1).max(10), feedbackDelayUnit: z.enum(['hours', 'days']) });
 const orderSchema = z.object({ action: z.enum(['up', 'down']) });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ templateId: string; taskId: string }> }) {
@@ -16,7 +17,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ te
   if (isDemoMode()) return NextResponse.json({ ok: true });
   const { templateId, taskId } = await params;
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase!.from('template_tasks').update({ title: parsed.data.title, description: sanitizeTaskDescription(parsed.data.description), task_type: parsed.data.taskType, client_visible: parsed.data.clientVisible, requires_completion: parsed.data.requiresCompletion, form_schema: parsed.data.taskType === 'form' ? parsed.data.formSchema : null }).eq('id', taskId).eq('template_id', templateId);
+  const { error } = await supabase!.from('template_tasks').update({ title: parsed.data.title, description: sanitizeTaskDescription(parsed.data.description), task_type: 'standard', client_visible: parsed.data.clientVisible, requires_completion: parsed.data.requiresCompletion, form_schema: parsed.data.formSchema, feedback_enabled: parsed.data.feedbackEnabled, feedback_delay_value: parsed.data.feedbackDelayValue, feedback_delay_unit: parsed.data.feedbackDelayUnit }).eq('id', taskId).eq('template_id', templateId);
   return error ? NextResponse.json({ error: 'Template task could not be saved.' }, { status: 500 }) : NextResponse.json({ ok: true });
 }
 

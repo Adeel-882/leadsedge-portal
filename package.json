@@ -9,11 +9,13 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
+    "verify:backend": "node scripts/verify-backend.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
     "next": "^16.3.3",

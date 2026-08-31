@@ -1,6 +1,16 @@
 import Link from 'next/link';
-import { Brand } from '@/components/brand';
+import { WarningCircle } from '@phosphor-icons/react/dist/ssr';
+import { AuthShell } from '@/components/auth/auth-shell';
 
-export default function AuthErrorPage() {
-  return <main className="grid min-h-screen place-items-center bg-[#f3f6f9] p-5"><div className="card w-full max-w-md p-8 text-center"><div className="flex justify-center"><Brand /></div><h1 className="mt-8 text-2xl font-bold">This sign-in link is unavailable</h1><p className="mt-3 text-sm leading-6 text-muted">It may have expired or already been used. Request a new secure link to continue.</p><Link href="/auth/sign-in" className="button-primary mt-6">Request a new link</Link></div></main>;
+const messages = {
+  expired: 'This link has expired or has already been used. Ask your administrator to resend the invitation.',
+  invalid: 'This invitation link is incomplete or invalid. Ask your administrator to send a new one.',
+  unauthorized: 'This account is not linked to an authorized Leadsedge Portal workspace.',
+  configuration: 'Authentication is temporarily unavailable. Please try again later.',
+} as const;
+
+export default async function AuthErrorPage({ searchParams }: { searchParams: Promise<{ reason?: string }> }) {
+  const { reason } = await searchParams;
+  const message = messages[reason as keyof typeof messages] || 'It may have expired or already been used. Request a new secure link to continue.';
+  return <AuthShell eyebrow="Access link unavailable" title="This sign-in link cannot be used" description={message}><div className="mt-8 rounded-lg border border-[#ead1d1] bg-[#fbf2f2] p-4"><div className="flex gap-3"><WarningCircle className="mt-0.5 flex-none text-[#963d3d]" size={19} aria-hidden /><p className="text-sm leading-6 text-[#6f4848]">For security, invitation and sign-in links expire and can only be used once.</p></div></div><Link href="/auth/sign-in" className="button-primary mt-6 w-full">Request a new link</Link></AuthShell>;
 }

@@ -3,10 +3,16 @@ export function initials(name: string) {
 }
 
 export function formatDate(value: string | null, options?: Intl.DateTimeFormatOptions) {
-  if (!value) return '—';
-  return new Intl.DateTimeFormat('en', options || { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
+  if (!value) return 'Not set';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not set';
+  try {
+    return new Intl.DateTimeFormat('en', options || { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+  } catch {
+    return 'Not set';
+  }
 }
 
 export function formatTime(value: string) {
-  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
+  return formatDate(value, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }

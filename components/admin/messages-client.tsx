@@ -1,0 +1,39 @@
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowRight, ChatCircleDots, Plus, X } from '@phosphor-icons/react';
+import { EmptyState } from '@/components/empty-state';
+import { formatTime, initials } from '@/lib/format';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import type { AdminConversationSummary, ProjectSummary } from '@/lib/types';
+
+export function AdminMessagesClient({ conversations, projects, viewerId }: { conversations: AdminConversationSummary[]; projects: ProjectSummary[]; viewerId: string }) {
+  const router = useRouter();
+  const [projectPicker, setProjectPicker] = useState(false);
+  useEffect(() => {
+    // The inbox re-renders through the server, so only poll while the tab is
+    // actually visible; realtime already covers foreground updates.
+    const poll = window.setInterval(() => { if (document.visibilityState === 'visible') router.refresh(); }, 60000);
+    const supabase = createSupabaseBrowserClient();
+    const refresh = () => { if (document.visibilityState === 'visible') router.refresh(); };
+    const refreshUserMessage = (payload: { new: Record<string, unknown> }) => {
+      if (payload.new.message_type === 'user') refresh();
+    };
+    const channel = supabase?.channel(`admin-message-inbox-${viewerId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'project_messages' }, refreshUserMessage)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'task_messages' }, refreshUserMessage)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'message_read_receipts', filter: `recipient_id=eq.${viewerId}` }, refresh)
+      .subscribe();
+    return () => {
+      window.clearInterval(poll);
+      if (supabase && channel) void supabase.removeChannel(channel);
+    };
+  }, [router, viewerId]);
+  return <div className="page-wrap">
+    <div className="page-header page-header-row"><div><p className="page-eyebrow">Communication</p><h1 className="page-title">Messages</h1><p className="page-subtitle">Unread conversations appear first. Project chat and task conversations remain separate.</p></div><button className="button-secondary" onClick={() => setProjectPicker(true)}><Plus size={16} weight="bold" aria-hidden />Project chat</button></div>
+    {conversations.length ? <section className="surface-flat overflow-hidden"><header className="flex items-center gap-2 border-b border-line bg-[#f8faf9] px-5 py-3"><ChatCircleDots size={16} className="text-muted" aria-hidden /><p className="text-xs font-semibold text-muted">{conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}</p></header>{conversations.map((conversation) => <Link key={`${conversation.kind}:${conversation.resourceId}`} href={conversation.href} className={`group flex items-center gap-3 border-b border-line p-4 last:border-b-0 hover:bg-[#f8faf9] sm:gap-4 sm:px-5 ${conversation.unreadCount ? 'bg-[#f2f8f6]' : ''}`}><span className="avatar h-10 w-10 bg-[#e6f1ef] text-teal">{initials(conversation.senderName)}</span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className={`truncate text-sm ${conversation.unreadCount ? 'font-bold' : 'font-semibold'}`}>{conversation.taskTitle || conversation.projectName}</p><span className="status-badge bg-[#edf0ef] text-muted">{conversation.kind === 'task' ? 'Task' : 'Project'}</span></div><p className={`mt-1 truncate text-sm ${conversation.unreadCount ? 'text-ink' : 'text-muted'}`}>{conversation.senderName}: {conversation.preview}</p><p className="mt-1 text-[11px] text-muted">{conversation.projectName}</p></div><div className="flex flex-col items-end gap-2"><p className="text-[11px] text-muted">{formatTime(conversation.lastMessageAt)}</p>{conversation.unreadCount > 0 && <span className="unread-pill" aria-label={`${conversation.unreadCount} unread`}>{conversation.unreadCount}</span>}<ArrowRight className="hidden text-muted transition-transform group-hover:translate-x-0.5 sm:block" size={15} aria-hidden /></div></Link>)}</section> : <EmptyState title="No message conversations yet" body="A project or task conversation appears after its first message is sent." />}
+    {projectPicker && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="project-chat-title"><div className="modal-card"><div className="flex items-start justify-between"><div><p className="page-eyebrow">Start or open</p><h2 id="project-chat-title" className="text-2xl font-bold">Project chat</h2><p className="mt-2 text-sm leading-6 text-muted">Choose an active project. Empty conversations remain out of the inbox until someone sends a message.</p></div><button className="icon-button" aria-label="Close" onClick={() => setProjectPicker(false)}><X size={19} aria-hidden /></button></div><div className="mt-6 max-h-80 overflow-y-auto rounded-lg border border-line">{projects.map((project) => <Link key={project.id} href={`/admin/projects/${project.id}/chat`} className="group flex items-center gap-3 border-b border-line p-4 last:border-b-0 hover:bg-[#f8faf9]"><span className="avatar h-9 w-9 bg-[#e6f1ef] text-teal">{initials(project.clientName)}</span><span className="min-w-0"><b className="block truncate text-sm">{project.projectName}</b><small className="text-muted">{project.clientName}</small></span><ArrowRight className="ml-auto text-muted transition-transform group-hover:translate-x-0.5" size={15} aria-hidden /></Link>)}</div><div className="mt-6 flex justify-end"><button className="button-secondary" onClick={() => setProjectPicker(false)}>Close</button></div></div></div>}
+  </div>;
+}

@@ -31,7 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tem
     const { error } = await supabase!.from('templates').update({ archived_at: new Date().toISOString() }).eq('id', templateId);
     return error ? NextResponse.json({ error: 'Template could not be archived.' }, { status: 500 }) : NextResponse.json({ ok: true });
   }
-  const { data: source, error } = await supabase!.from('templates').select('name,description,template_tasks(title,description,task_type,sort_order,client_visible,requires_completion,form_schema)').eq('id', templateId).single();
+  const { data: source, error } = await supabase!.from('templates').select('name,description,template_tasks(title,description,task_type,sort_order,client_visible,requires_completion,form_schema,feedback_enabled,feedback_delay_value,feedback_delay_unit)').eq('id', templateId).single();
   if (error || !source) return NextResponse.json({ error: 'Template not found.' }, { status: 404 });
   const { data: copy, error: copyError } = await supabase!.from('templates').insert({ name: `${source.name} copy`, description: source.description, created_by: viewer.id }).select('id').single();
   if (copyError || !copy) return NextResponse.json({ error: 'Template could not be duplicated.' }, { status: 500 });

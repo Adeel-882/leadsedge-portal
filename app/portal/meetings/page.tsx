@@ -1,3 +1,19 @@
-export default function ClientMeetingsPage() {
-  return <div><p className="page-eyebrow">Coming in Phase 2</p><h1 className="page-title">Meetings</h1><p className="page-subtitle">Scheduling will be available here soon.</p><div className="card mt-7 p-7 text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#e8f5f2] text-2xl text-teal">□</div><h2 className="mt-4 text-lg font-bold">No meetings to show</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">When booking is introduced, you will be able to choose a time with your project owner directly from your phone.</p></div></div>;
+import Link from 'next/link';
+import { ArrowRight, CalendarBlank } from '@phosphor-icons/react/dist/ssr';
+import { EmptyState } from '@/components/empty-state';
+import { MeetingScheduler } from '@/components/meetings/meeting-scheduler';
+import { requireRole } from '@/lib/auth';
+import { currentTimestamp } from '@/lib/clock';
+import { formatDate } from '@/lib/format';
+import { getMeetings } from '@/lib/meetings';
+import { getClientProjects } from '@/lib/queries';
+
+export default async function ClientMeetingsPage() {
+  await requireRole('client');
+  const [projects, meetings] = await Promise.all([getClientProjects(true), getMeetings()]);
+  const upcoming = meetings.filter((item) => item.status === 'scheduled' && Date.parse(item.startAt) >= currentTimestamp());
+  return <div>
+    <div className="page-header"><p className="page-eyebrow">Scheduling</p><h1 className="page-title">Meetings</h1><p className="page-subtitle">Choose a genuine open time with your project owner.</p></div>
+    <div className="space-y-5"><MeetingScheduler projects={projects} /><section className="surface-flat overflow-hidden"><div className="flex items-center gap-3 border-b border-line p-5"><span className="grid h-9 w-9 place-items-center rounded-lg bg-[#e6f1ef] text-teal"><CalendarBlank size={18} weight="fill" aria-hidden /></span><div><h2 className="section-title">Your upcoming meetings</h2><p className="mt-0.5 text-xs text-muted">Confirmed times in your scheduling timezone</p></div></div>{upcoming.length ? <div>{upcoming.map((meeting) => <Link key={meeting.id} href={`/portal/meetings/${meeting.id}`} className="group grid gap-3 border-b border-line p-4 last:border-b-0 hover:bg-[#f8faf9] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"><div><p className="text-sm font-semibold">{meeting.title}</p><p className="mt-1 text-xs text-muted">{formatDate(meeting.startAt, { month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: meeting.timezone })} <span aria-hidden>•</span> {meeting.timezone}</p></div><ArrowRight size={16} className="text-muted transition-transform group-hover:translate-x-0.5" aria-hidden /></Link>)}</div> : <div className="p-5"><EmptyState title="No upcoming meetings" body="Choose a project above when you are ready to schedule time." /></div>}</section></div>
+  </div>;
 }

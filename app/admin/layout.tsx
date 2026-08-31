@@ -1,11 +1,11 @@
 import { AdminShell } from '@/components/admin/admin-shell';
-import { DemoBanner } from '@/components/demo-banner';
+import { DemoBanner, EmailConfigurationBanner } from '@/components/demo-banner';
 import { requireRole } from '@/lib/auth';
-import { getNotifications } from '@/lib/queries';
+import { getUnreadCounts } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [viewer, notifications] = await Promise.all([requireRole('admin'), getNotifications()]);
-  return <AdminShell displayName={viewer.fullName} unreadCount={notifications.filter((item) => !item.readAt).length}><DemoBanner />{children}</AdminShell>;
+  const [viewer, unread] = await Promise.all([requireRole('admin'), getUnreadCounts()]);
+  return <AdminShell displayName={viewer.fullName} viewerId={viewer.id} messageUnreadCount={unread.messages} notificationUnreadCount={unread.notifications}><DemoBanner /><EmailConfigurationBanner />{children}</AdminShell>;
 }

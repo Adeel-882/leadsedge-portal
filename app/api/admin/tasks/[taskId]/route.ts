@@ -3,6 +3,7 @@ import { requireApiRole } from '@/lib/auth';
 import { isDemoMode } from '@/lib/env';
 import { sanitizeTaskDescription } from '@/lib/queries';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { taskUpdateSchema } from '@/lib/validation';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ taskId: string }> }) {
@@ -13,17 +14,32 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ta
   if (isDemoMode()) return NextResponse.json({ ok: true });
   const { taskId } = await params;
   const supabase = await createSupabaseServerClient();
-  const { data: current, error: loadError } = await supabase!.from('project_tasks').select('project_id,status,assignee_id,title').eq('id', taskId).single();
+  const { data: current, error: loadError } = await supabase!.from('project_tasks').select('project_id,status,assignee_id,title,feedback_state').eq('id', taskId).is('archived_at', null).single();
   if (loadError || !current) return NextResponse.json({ error: 'Task not found.' }, { status: 404 });
+  if (parsed.data.assigneeId) {
+    const { data: membership } = await supabase!.from('project_clients').select('client_id').eq('project_id', current.project_id).eq('client_id', parsed.data.assigneeId).maybeSingle();
+    if (!membership) return NextResponse.json({ error: 'The selected assignee does not belong to this project.' }, { status: 400 });
+  }
   const now = new Date().toISOString();
-  const { error } = await supabase!.from('project_tasks').update({ title: parsed.data.title, description: sanitizeTaskDescription(parsed.data.description), assignee_id: parsed.data.assigneeId, client_visible: parsed.data.clientVisible, requires_completion: parsed.data.requiresCompletion, status: parsed.data.status, due_at: parsed.data.dueAt, activated_at: parsed.data.status === 'active' && current.status === 'draft' ? now : undefined, completed_at: parsed.data.status === 'completed' && current.status !== 'completed' ? now : parsed.data.status !== 'completed' ? null : undefined }).eq('id', taskId);
+  const scheduledFor = parsed.data.status === 'completed' && parsed.data.feedback.enabled && current.status !== 'completed'
+    ? new Date(Date.now() + parsed.data.feedback.delayValue * (parsed.data.feedback.delayUnit === 'minutes' ? 60_000 : parsed.data.feedback.delayUnit === 'hours' ? 3_600_000 : 86_400_000)).toISOString()
+    : undefined;
+  const feedbackState = !parsed.data.feedback.enabled ? 'not_configured'
+    : parsed.data.status !== 'completed' ? 'pending'
+      : current.feedback_state === 'requested' || current.feedback_state === 'submitted' ? current.feedback_state : 'waiting';
+  const { error } = await supabase!.from('project_tasks').update({ title: parsed.data.title, description: sanitizeTaskDescription(parsed.data.description), assignee_id: parsed.data.assigneeId, client_visible: parsed.data.clientVisible, requires_completion: parsed.data.requiresCompletion, status: parsed.data.status, due_at: null, form_schema: parsed.data.feedback.formSchema, feedback_enabled: parsed.data.feedback.enabled, feedback_delay_value: parsed.data.feedback.delayValue, feedback_delay_unit: parsed.data.feedback.delayUnit, feedback_state: feedbackState, feedback_scheduled_for: scheduledFor, activated_at: parsed.data.status === 'active' && current.status === 'draft' ? now : undefined, completed_at: parsed.data.status === 'completed' && current.status !== 'completed' ? now : parsed.data.status !== 'completed' ? null : undefined }).eq('id', taskId);
   if (error) return NextResponse.json({ error: 'Task could not be saved.' }, { status: 500 });
   if (current.assignee_id !== parsed.data.assigneeId && parsed.data.assigneeId) await supabase!.from('task_activity').insert({ task_id: taskId, actor_id: viewer.id, event_type: 'task.assigned', body: 'updated the task assignee' });
   if (current.status !== parsed.data.status) {
     await supabase!.from('task_activity').insert({ task_id: taskId, actor_id: viewer.id, event_type: `task.${parsed.data.status}`, body: `${parsed.data.status === 'active' ? 'activated' : parsed.data.status === 'completed' ? 'completed' : 'moved'} this task` });
     if (parsed.data.status === 'active' && parsed.data.assigneeId) {
-      const { data: client } = await supabase!.from('clients').select('auth_user_id').eq('id', parsed.data.assigneeId).single();
-      if (client?.auth_user_id) await supabase!.from('notifications').insert({ user_id: client.auth_user_id, project_id: current.project_id, task_id: taskId, type: 'task.activated', title: 'New task ready', body: `${parsed.data.title} is ready for you.` });
+      const { data: client } = await supabase!.from('clients').select('auth_user_id,email,full_name').eq('id', parsed.data.assigneeId).single();
+      if (client?.auth_user_id) await supabase!.from('notifications').insert({ user_id: client.auth_user_id, project_id: current.project_id, task_id: taskId, type: 'task.activated', title: 'New task ready', body: `${parsed.data.title} is ready for you.`, target_url: `/portal/tasks/${taskId}` });
+      if (client?.email) await createSupabaseAdminClient()!.from('email_outbox').insert({ user_id: client.auth_user_id, client_id: parsed.data.assigneeId, project_id: current.project_id, task_id: taskId, email_type: 'task.assigned', recipient_email: client.email, template_data: { clientName: client.full_name, taskTitle: parsed.data.title, targetUrl: `/portal/tasks/${taskId}` }, dedupe_key: `task-assigned:${taskId}` });
+  // Durable automation work (notifications, email_outbox rows) is committed by
+  // the statements above. Draining the outbox is the cron processor's job at
+  // /api/cron/automation; doing it inline made the user wait on Supabase round
+  // trips and Resend delivery before this response returned.
     }
   }
   return NextResponse.json({ ok: true });

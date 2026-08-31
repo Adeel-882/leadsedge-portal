@@ -45,6 +45,27 @@ export default defineConfig(async () => {
   const { cloudflare } = await import('@cloudflare/vite-plugin');
 
   return {
+    // Vinext beta imports its App Router navigation module both statically and
+    // dynamically from next/link. Rolldown otherwise folds that module into the
+    // browser entry and drops the namespace exports used by the dynamic import,
+    // producing `... is not a function` errors in production navigation.
+    // Preserve that module boundary until the upstream bundling issue is fixed.
+    build: {
+      rolldownOptions: {
+        output: {
+          minifyInternalExports: false,
+          codeSplitting: {
+            groups: [{
+              name: 'vinext-navigation',
+              test: /vinext[\\/]dist[\\/]shims[\\/]navigation\.js$/,
+              priority: 100,
+              minSize: 0,
+              minModuleSize: 0,
+            }],
+          },
+        },
+      },
+    },
     css: { postcss: { plugins: [tailwindcss()] } },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }

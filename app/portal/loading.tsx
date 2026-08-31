@@ -1,3 +1,3 @@
 export default function PortalLoading() {
-  return <div className="animate-pulse"><div className="h-40 rounded-3xl bg-[#dfe5eb]" /><div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">{[1,2,3,4].map((item) => <div key={item} className="h-24 rounded-2xl bg-[#e7ebf0]" />)}</div><div className="mt-6 h-72 rounded-2xl bg-[#e7ebf0]" /></div>;
+  return <div aria-label="Loading portal"><div className="skeleton h-3 w-28" /><div className="skeleton mt-3 h-9 w-80 max-w-full" /><div className="skeleton mt-3 h-4 w-96 max-w-full" /><div className="mt-6 grid gap-3 lg:grid-cols-[1.4fr_.6fr]"><div className="skeleton h-52" /><div className="skeleton h-52" /></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="skeleton h-20" /><div className="skeleton h-20" /></div><div className="skeleton mt-4 h-64" /></div>;
 }

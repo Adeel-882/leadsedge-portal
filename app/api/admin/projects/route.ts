@@ -5,6 +5,7 @@ import { appUrl, isDemoMode } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { projectCreateSchema } from '@/lib/validation';
+import { buildPortalConfirmationUrl } from '@/lib/auth-flow';
 
 export async function POST(request: Request) {
   const viewer = await requireApiRole('admin');
@@ -28,10 +29,13 @@ export async function POST(request: Request) {
     clientAuthUserId = existing.auth_user_id; fullName = existing.full_name; email = existing.email; company = existing.company || undefined;
   } else {
     fullName = parsed.data.client.fullName; email = parsed.data.client.email.toLowerCase(); company = parsed.data.client.company;
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({ type: 'invite', email, options: { data: { role: 'client', full_name: fullName }, redirectTo: `${appUrl()}/auth/callback?next=/portal` } });
-    if (linkError || !linkData.user) return NextResponse.json({ error: 'The client account could not be prepared. Check whether this email already exists.' }, { status: 400 });
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({ type: 'invite', email, options: { data: { role: 'client', full_name: fullName }, redirectTo: `${appUrl()}/portal` } });
+    if (linkError || !linkData.user || !linkData.properties?.hashed_token) return NextResponse.json({ error: 'The client account could not be prepared. Check whether this email already exists.' }, { status: 400 });
+    const { data: invitedProfile, error: profileError } = await admin.from('users').select('role').eq('id', linkData.user.id).maybeSingle();
+    if (profileError || !invitedProfile) return NextResponse.json({ error: 'The client account profile could not be verified.' }, { status: 400 });
+    if (invitedProfile.role === 'admin') return NextResponse.json({ error: 'An administrator account cannot be invited as a client.' }, { status: 400 });
     clientAuthUserId = linkData.user.id;
-    actionLink = linkData.properties.action_link;
+    actionLink = buildPortalConfirmationUrl({ tokenHash: linkData.properties.hashed_token, type: 'invite' });
   }
 
   const { data: bundle, error: bundleError } = await supabase.rpc('create_project_bundle', { project_name_input: parsed.data.projectName, client_auth_user_id_input: clientAuthUserId, client_full_name_input: fullName, client_email_input: email, client_company_input: company || null }).single();

@@ -1,5 +1,5 @@
 import Link from 'next/link';
 
 export function Brand({ href = '/' }: { href?: string }) {
-  return <Link href={href} className="flex items-center gap-3" aria-label="Leadsedge Portal home"><span className="brand-mark">L</span><span><span className="block font-bold tracking-[-.02em] text-ink">Leadsedge</span><span className="block text-[10px] font-bold uppercase tracking-[.2em] text-muted">Portal</span></span></Link>;
+  return <Link href={href} className="brand-link" aria-label="Leadsedge Portal home"><span className="brand-mark">LE</span><span className="min-w-0"><span className="brand-wordmark">Leadsedge</span><span className="brand-subtitle">Portal</span></span></Link>;
 }

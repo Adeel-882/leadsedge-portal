@@ -2,6 +2,8 @@ export type Role = 'admin' | 'client';
 export type ProjectStatus = 'active' | 'completed' | 'archived';
 export type TaskStatus = 'draft' | 'active' | 'completed';
 export type TaskType = 'standard' | 'form';
+export type FeedbackState = 'not_configured' | 'pending' | 'waiting' | 'requested' | 'submitted' | 'cancelled';
+export type FeedbackDelayUnit = 'minutes' | 'hours' | 'days';
 
 export type Viewer = {
   id: string;
@@ -35,7 +37,7 @@ export type ProjectSummary = {
 export type FormField = {
   id: string;
   label: string;
-  type: 'text' | 'textarea' | 'radio';
+  type: 'text' | 'textarea' | 'radio' | 'select' | 'checkbox';
   required?: boolean;
   options?: string[];
 };
@@ -56,6 +58,17 @@ export type TaskRecord = {
   completedAt: string | null;
   createdAt: string;
   formSchema: FormField[] | null;
+  feedbackEnabled: boolean;
+  feedbackDelayValue: number | null;
+  feedbackDelayUnit: FeedbackDelayUnit | null;
+  feedbackState: FeedbackState;
+  feedbackScheduledFor: string | null;
+  feedbackRequestedAt: string | null;
+  feedbackSubmittedAt: string | null;
+};
+
+export type ClientTaskSummary = Pick<TaskRecord, 'id' | 'projectId' | 'title' | 'status' | 'feedbackState' | 'feedbackSubmittedAt'> & {
+  projectName: string;
 };
 
 export type TemplateSummary = {
@@ -77,6 +90,9 @@ export type TemplateTaskRecord = {
   clientVisible: boolean;
   requiresCompletion: boolean;
   formSchema: FormField[] | null;
+  feedbackEnabled: boolean;
+  feedbackDelayValue: number | null;
+  feedbackDelayUnit: FeedbackDelayUnit | null;
 };
 
 export type ConversationMessage = {
@@ -97,6 +113,13 @@ export type ActivityEvent = {
   createdAt: string;
 };
 
+export type FeedbackSubmission = {
+  id: string;
+  answers: Record<string, string | string[]>;
+  submittedAt: string;
+  submittedByName: string;
+};
+
 export type NotificationRecord = {
   id: string;
   type: string;
@@ -104,4 +127,56 @@ export type NotificationRecord = {
   body: string;
   readAt: string | null;
   createdAt: string;
+  targetUrl: string;
+};
+
+export type AvailabilityRule = {
+  weekday: number;
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+};
+
+export type AvailabilitySettings = {
+  timezone: string;
+  meetingDurationMinutes: number;
+  bufferMinutes: number;
+  minimumNoticeMinutes: number;
+  maximumAdvanceDays: number;
+  rules: AvailabilityRule[];
+};
+
+export type MeetingRecord = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  clientId: string;
+  clientName: string;
+  ownerId: string;
+  ownerName: string;
+  title: string;
+  description: string;
+  startAt: string;
+  endAt: string;
+  timezone: string;
+  durationMinutes: number;
+  status: 'scheduled' | 'cancelled' | 'completed';
+  googleEventHtmlLink: string | null;
+  cancellationReason: string | null;
+  cancelledAt: string | null;
+};
+
+export type MeetingSlot = { startAt: string; endAt: string; label: string };
+
+export type AdminConversationSummary = {
+  kind: 'task' | 'project';
+  resourceId: string;
+  projectId: string;
+  projectName: string;
+  taskTitle: string | null;
+  senderName: string;
+  preview: string;
+  lastMessageAt: string;
+  unreadCount: number;
+  href: string;
 };
