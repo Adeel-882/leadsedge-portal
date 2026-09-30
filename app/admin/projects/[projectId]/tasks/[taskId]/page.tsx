@@ -27,7 +27,7 @@ export default async function AdminTaskDetailPage({ params }: { params: Promise<
   const submission = submissionResult.value;
 
   return <div className="page-wrap">
-    <Link href={`/admin/projects/${projectId}/tasks`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal"><ArrowLeft size={15} aria-hidden />Back to tasks</Link>
+    <Link prefetch={false} href={`/admin/projects/${projectId}/tasks`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal"><ArrowLeft size={15} aria-hidden />Back to tasks</Link>
     <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,.75fr)]">
       <main className="space-y-4">
         <section className="surface-flat overflow-hidden">

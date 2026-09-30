@@ -1,6 +1,8 @@
-# Leadsedge Portal — Phase 2
+# Leadsedge Portal
 
 Leadsedge Portal is a focused, responsive client-delivery application for lead assignments, automated feedback, meetings, isolated task conversations, project chat, and notifications. It has separate admin and client interfaces and uses Supabase authentication and PostgreSQL Row Level Security for authorization.
+
+The application builds as a portable Vinext standalone Node.js server. Cloudflare Workers, Wrangler, Docker, and hosting-provider-specific adapters are not required to build or run it.
 
 ## Implemented routes
 
@@ -73,6 +75,19 @@ Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and a long random `CALENDAR_TOKE
 7. Keep `LEADSEDGE_DEMO_MODE=false` for real data. Demo records are loaded only when this value is explicitly `true`.
 
 Run `npm run verify:backend` to validate the production-mode environment and make a safe server-side query. It reports only configuration/connection status and never prints key values.
+
+## Production Node build
+
+For the current Frankfurt staging backend:
+
+```powershell
+npm run build:frankfurt
+npm run start:frankfurt
+```
+
+Open `http://127.0.0.1:3000`. The standalone server reads `HOST` and `PORT`, defaults to `0.0.0.0:3000`, and accepts hosting-platform overrides. `.env.frankfurt.local` remains local and gitignored; do not copy its private values into source control.
+
+For another environment, inject its variables through the process environment, run `npm run build`, and start the generated bundle with `npm start`.
 
 Supabase email templates may be branded as a fallback, but new-client invitations are generated server-side and sent through Resend with Leadsedge Portal branding. Failed deliveries are recorded and the project overview provides a resend action.
 

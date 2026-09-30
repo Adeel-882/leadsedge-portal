@@ -5,8 +5,7 @@ import { feedbackSubmissionErrorMessage } from '@/lib/feedback';
 const migration = readFileSync(new URL('../supabase/migrations/202608280001_message_classification_and_feedback_submission.sql', import.meta.url), 'utf8');
 const messageRoute = readFileSync(new URL('../app/api/messages/[kind]/[resourceId]/route.ts', import.meta.url), 'utf8');
 const queries = readFileSync(new URL('../lib/queries.ts', import.meta.url), 'utf8');
-const conversation = readFileSync(new URL('../components/conversation.tsx', import.meta.url), 'utf8');
-const adminInbox = readFileSync(new URL('../components/admin/messages-client.tsx', import.meta.url), 'utf8');
+const realtime = readFileSync(new URL('../lib/realtime-sync.ts', import.meta.url), 'utf8');
 
 describe('conversation classification', () => {
   it('stores browser-authored messages explicitly as user messages', () => {
@@ -22,8 +21,7 @@ describe('conversation classification', () => {
     expect(migration).toContain("if new.message_type <> 'user' then return new; end if;");
     expect(migration).toContain("pm.message_type = 'user'");
     expect(migration).toContain("tm.message_type = 'user'");
-    expect(conversation).toContain("payload.new.message_type === 'user'");
-    expect(adminInbox).toContain("payload.new.message_type === 'user'");
+    expect(realtime).toContain("row.message_type !== 'user'");
   });
 });
 

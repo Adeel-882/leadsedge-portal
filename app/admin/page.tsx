@@ -1,9 +1,4 @@
-import { DashboardClient } from '@/components/admin/dashboard-client';
+import { CachedDashboard } from '@/components/cache/admin';
 import { requireRole } from '@/lib/auth';
-import { getAdminClients, getAdminProjects } from '@/lib/queries';
-import { getNextMeeting } from '@/lib/meetings';
-
-export default async function AdminDashboardPage() {
-  const [viewer, projects, clients, upcomingMeeting] = await Promise.all([requireRole('admin'), getAdminProjects(), getAdminClients(), getNextMeeting()]);
-  return <DashboardClient projects={projects} clients={clients} ownerName={viewer.fullName} upcomingMeeting={upcomingMeeting} />;
-}
+import { initialScreen } from '@/lib/screen-data';
+export default async function Page() { const viewer=await requireRole('admin'); return <CachedDashboard ownerName={viewer.fullName} initial={await initialScreen('admin','dashboard')}/>; }

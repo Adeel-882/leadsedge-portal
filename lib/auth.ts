@@ -2,9 +2,11 @@ import { redirect } from 'next/navigation';
 import { cache } from 'react';
 import { demoAdmin, demoClientViewer } from './demo-data';
 import { isDemoMode } from './env';
+import { getPortalBootstrap, type PortalBootstrap } from './bootstrap';
 import { createSupabaseAdminClient } from './supabase/admin';
 import { createSupabaseServerClient } from './supabase/server';
 import type { Role, Viewer } from './types';
+import { measureServerOperation } from './perf';
 
 type SupabaseServerClient = NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>;
 
@@ -14,45 +16,46 @@ function selectProfile(supabase: SupabaseServerClient, userId: string) {
   return supabase.from('users').select(profileColumns).eq('id', userId).maybeSingle();
 }
 
-const getRequestViewer = cache(async (): Promise<Viewer | null> => {
-  if (isDemoMode()) return demoAdmin;
+const getRequestBootstrap = cache(async (): Promise<PortalBootstrap | null> => {
+  if (isDemoMode()) return null;
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
-
-  // getUser() validates the session against the auth server and remains the only
-  // thing authorization depends on. The profile row is keyed by the same subject
-  // id that the stored session already carries, so it is fetched concurrently
-  // rather than waiting a full round trip for getUser() to return first. Any
-  // result that does not belong to the verified user is discarded and refetched.
-  const { data: sessionData } = await supabase.auth.getSession();
-  const sessionUserId = sessionData.session?.user?.id;
-  const [{ data: authData }, speculativeProfile] = await Promise.all([
-    supabase.auth.getUser(),
-    sessionUserId ? selectProfile(supabase, sessionUserId) : Promise.resolve(null),
-  ]);
-  if (!authData.user) return null;
-
-  const speculative = speculativeProfile?.data;
-  const profile = speculative && speculative.id === authData.user.id
-    ? speculative
-    : (await selectProfile(supabase, authData.user.id)).data;
-  if (!profile) return null;
-
-  const settings = Array.isArray(profile.admin_settings) ? profile.admin_settings[0] : profile.admin_settings;
-  const fullName = profile.role === 'admin' ? settings?.display_name || profile.full_name : profile.full_name;
-  return { id: profile.id, email: profile.email, role: profile.role as Role, fullName, avatarUrl: profile.avatar_url };
+  const { data: claimsData } = await measureServerOperation('auth.getClaims', () => supabase.auth.getClaims());
+  if (typeof claimsData?.claims?.sub !== 'string') return null;
+  return getPortalBootstrap();
 });
 
 export async function getViewer(): Promise<Viewer | null> {
-  return getRequestViewer();
+  if (isDemoMode()) return demoAdmin;
+  return (await getRequestBootstrap())?.viewer || null;
+}
+
+export const getViewerWithContact = cache(async (): Promise<Viewer | null> => {
+  if (isDemoMode()) return demoAdmin;
+  const viewer = await getViewer();
+  if (!viewer) return null;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return null;
+  const { data: profile } = await measureServerOperation('profile.select.contact', () => selectProfile(supabase, viewer.id));
+  if (!profile || profile.id !== viewer.id || profile.role !== viewer.role) return null;
+  return { ...viewer, email: profile.email, avatarUrl: profile.avatar_url };
+});
+
+export async function requireBootstrapRole(role: Role): Promise<PortalBootstrap> {
+  if (isDemoMode()) return {
+    viewer: role === 'admin' ? demoAdmin : demoClientViewer,
+    authorization: { disabled: false },
+    shell: { primaryProjectId: null, projectName: null },
+    unread: { messages: 0, notifications: 0 },
+  };
+  const bootstrap = await getRequestBootstrap();
+  if (!bootstrap) redirect(`/auth/sign-in?next=${role === 'admin' ? '/admin' : '/portal'}`);
+  if (bootstrap.viewer.role !== role) redirect(bootstrap.viewer.role === 'admin' ? '/admin' : '/portal');
+  return bootstrap;
 }
 
 export async function requireRole(role: Role): Promise<Viewer> {
-  if (isDemoMode()) return role === 'admin' ? demoAdmin : demoClientViewer;
-  const viewer = await getViewer();
-  if (!viewer) redirect(`/auth/sign-in?next=${role === 'admin' ? '/admin' : '/portal'}`);
-  if (viewer.role !== role) redirect(viewer.role === 'admin' ? '/admin' : '/portal');
-  return viewer;
+  return (await requireBootstrapRole(role)).viewer;
 }
 
 export async function requireApiRole(role: Role) {

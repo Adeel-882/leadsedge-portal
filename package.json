@@ -1,5 +1,5 @@
 {
-  "name": "sites-project",
+  "name": "leadsedge-portal",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -8,16 +8,20 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
-    "start": "vinext start",
+    "start": "node dist/standalone/server.js",
+    "build:frankfurt": "node --env-file=.env.frankfurt.local node_modules/vinext/dist/cli.js build",
+    "start:frankfurt": "node --env-file=.env.frankfurt.local dist/standalone/server.js",
     "verify:backend": "node scripts/verify-backend.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .vinext --ignore-pattern work",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "signin:frankfurt": "node --env-file=.env.frankfurt.local scripts/create-sign-in-link.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
+    "@tanstack/react-query": "^5.104.0",
     "next": "^16.3.3",
     "react": "19.2.6",
     "react-dom": "19.2.6",
@@ -26,9 +30,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
-    "@cloudflare/workers-types": "4.20260515.1",
-    "@openai/sites-vite-plugin": "^0.1.0 || ^0.2.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
@@ -43,14 +44,11 @@
     "typescript": "5.9.3",
     "vinext": "1.0.0-beta.3",
     "vite": "8.0.13",
-    "vitest": "^4.1.11",
-    "wrangler": "4.92.0"
+    "vitest": "^4.1.11"
   },
   "type": "module",
   "allowScripts": {
-    "esbuild@0.27.3": true,
-    "sharp@0.34.5": true,
-    "unrs-resolver@1.12.2": true,
-    "workerd@1.20260515.1": true
+    "sharp@0.35.4": true,
+    "unrs-resolver@1.12.2": true
   }
 }

@@ -1,13 +1,15 @@
 import crypto from 'node:crypto';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { requireApiRole } from '@/lib/auth';
+import { getViewerWithContact, requireApiRole } from '@/lib/auth';
 import { buildGoogleAuthorizationUrl, googleCalendarConfigured } from '@/lib/calendar';
 import { appUrl } from '@/lib/env';
 
 export async function GET() {
-  const viewer = await requireApiRole('admin');
+  const authorized = await requireApiRole('admin');
   const base = appUrl().replace(/\/$/, '');
+  if (!authorized) return NextResponse.redirect(`${base}/auth/sign-in?next=/admin/settings`);
+  const viewer = await getViewerWithContact();
   if (!viewer) return NextResponse.redirect(`${base}/auth/sign-in?next=/admin/settings`);
   if (!googleCalendarConfigured()) return NextResponse.redirect(`${base}/admin/settings?calendar=not-configured`);
   const state = crypto.randomBytes(32).toString('base64url');

@@ -1,4 +1,5 @@
 'use client';
+import { useCacheMutation } from '@/components/cached-screen';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -9,6 +10,7 @@ import { leadFeedbackForm } from '@/lib/demo-data';
 import type { ClientSummary, FeedbackDelayUnit, FormField, TaskRecord, TaskStatus } from '@/lib/types';
 
 export function TaskEditor({ task, clients, allowMinuteDelays = false }: { task: TaskRecord; clients: ClientSummary[]; allowMinuteDelays?: boolean }) {
+  const invalidate = useCacheMutation();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -29,7 +31,7 @@ export function TaskEditor({ task, clients, allowMinuteDelays = false }: { task:
     const response = await fetch(`/api/admin/tasks/${task.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, description, assigneeId: assigneeId || null, clientVisible, requiresCompletion, status: nextStatus, feedback: { enabled: feedbackEnabled, delayValue, delayUnit, formSchema } }) });
     const result = await response.json() as { error?: string };
     if (!response.ok) setError(result.error || 'Task could not be saved.');
-    else { setStatus(nextStatus); setOpen(false); router.refresh(); }
+    else { setStatus(nextStatus); setOpen(false); await invalidate('task', task.id); router.refresh(); }
     setSaving(false);
   }
 
@@ -43,7 +45,7 @@ export function TaskEditor({ task, clients, allowMinuteDelays = false }: { task:
     setSaving(true); setError('');
     const response = await fetch(`/api/admin/tasks/${task.id}/feedback`, { method: 'POST' });
     const result = await response.json() as { error?: string };
-    if (!response.ok) setError(result.error || 'Feedback could not be requested.'); else router.refresh();
+    if (!response.ok) setError(result.error || 'Feedback could not be requested.'); else { await invalidate('task', task.id); router.refresh(); }
     setSaving(false);
   }
 
@@ -52,7 +54,7 @@ export function TaskEditor({ task, clients, allowMinuteDelays = false }: { task:
     setSaving(true); setError('');
     const response = await fetch(`/api/admin/tasks/${task.id}/feedback`, { method: 'DELETE' });
     const result = await response.json() as { error?: string };
-    if (!response.ok) setError(result.error || 'Feedback could not be cancelled.'); else router.refresh();
+    if (!response.ok) setError(result.error || 'Feedback could not be cancelled.'); else { await invalidate('task', task.id); router.refresh(); }
     setSaving(false);
   }
 

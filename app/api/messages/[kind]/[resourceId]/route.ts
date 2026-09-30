@@ -4,6 +4,7 @@ import { isDemoMode } from '@/lib/env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { messageSchema } from '@/lib/validation';
 import { getAuthorizedClientProject, getAuthorizedClientTask } from '@/lib/client-access';
+import { getProjectMessages, getTaskMessages } from '@/lib/queries';
 
 async function clientCanAccess(viewerId: string, kind: 'task' | 'project', resourceId: string) {
   return kind === 'task'
@@ -11,11 +12,25 @@ async function clientCanAccess(viewerId: string, kind: 'task' | 'project', resou
     : Boolean(await getAuthorizedClientProject(viewerId, resourceId));
 }
 
+export async function GET(request: Request, { params }: { params: Promise<{ kind: string; resourceId: string }> }) {
+  const viewer = await getViewer();
+  if (!viewer) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+  if (request.headers.get('x-cache-viewer') && request.headers.get('x-cache-viewer') !== viewer.id) return NextResponse.json({ error: 'Account changed. Reload this page.' }, { status: 403 });
+  const { kind, resourceId } = await params;
+  if (kind !== 'task' && kind !== 'project') return NextResponse.json({ error: 'Invalid conversation.' }, { status: 404 });
+  if (viewer.role === 'client' && !await clientCanAccess(viewer.id, kind, resourceId)) return NextResponse.json({ error: 'Conversation is unavailable.' }, { status: 404 });
+  const beforeValue = new URL(request.url).searchParams.get('before');
+  const before = beforeValue && !Number.isNaN(Date.parse(beforeValue)) ? beforeValue : undefined;
+  const messages = kind === 'task' ? await getTaskMessages(resourceId, before) : await getProjectMessages(resourceId, before);
+  return NextResponse.json({ messages, hasMore: messages.length === 50 });
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ kind: string; resourceId: string }> }) {
   const viewer = await getViewer();
   if (!viewer) return NextResponse.json({ error: 'Sign in to send a message.' }, { status: 401 });
   const parsed = messageSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Write a message between 1 and 5,000 characters.' }, { status: 400 });
+  if (request.headers.get('x-cache-viewer') && request.headers.get('x-cache-viewer') !== viewer.id) return NextResponse.json({ error: 'Account changed. Reload this page.' }, { status: 403 });
   const { kind, resourceId } = await params;
   if (kind !== 'task' && kind !== 'project') return NextResponse.json({ error: 'Invalid conversation.' }, { status: 404 });
   if (isDemoMode()) return NextResponse.json({ message: { id: crypto.randomUUID(), senderId: viewer.id, senderName: viewer.fullName, senderRole: viewer.role, body: parsed.data.body, attachmentUrl: parsed.data.attachmentUrl || null, createdAt: new Date().toISOString() } }, { status: 201 });
@@ -33,9 +48,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
   return NextResponse.json({ message: { id: saved.id, senderId: viewer.id, senderName: viewer.fullName, senderRole: viewer.role, body: parsed.data.body, attachmentUrl: parsed.data.attachmentUrl || null, createdAt: saved.created_at } }, { status: 201 });
 }
 
-export async function PATCH(_request: Request, { params }: { params: Promise<{ kind: string; resourceId: string }> }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ kind: string; resourceId: string }> }) {
   const viewer = await getViewer();
   if (!viewer) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+  if (request.headers.get('x-cache-viewer') && request.headers.get('x-cache-viewer') !== viewer.id) return NextResponse.json({ error: 'Account changed. Reload this page.' }, { status: 403 });
   const { kind, resourceId } = await params;
   if (kind !== 'task' && kind !== 'project') return NextResponse.json({ error: 'Invalid conversation.' }, { status: 404 });
   if (isDemoMode()) return NextResponse.json({ ok: true });

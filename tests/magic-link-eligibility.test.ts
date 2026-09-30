@@ -34,18 +34,30 @@ describe('magic-link eligibility', () => {
     expect(shouldUseBrandedEmailFallback({ code: 'otp_expired', status: 400 })).toBe(false);
   });
 
-  it('checks application authorization before requesting an OTP and keeps the PKCE callback', () => {
-    expect(route.indexOf(".from('users')")).toBeLessThan(route.indexOf('signInWithOtp'));
+  it('uses the anonymous OTP flow without privileged pre-auth authorization', () => {
     expect(route).toContain('shouldCreateUser: false');
-    expect(route).toContain('/auth/callback?next=');
-    expect(route).toContain('getUserById(profile.id)');
-    expect(route).toContain("type: 'magiclink'");
+    expect(route).toContain('/auth/confirm?next=');
+    expect(route).toContain('signInWithOtp');
+    expect(route).toContain('hasPublicAuthEnv');
+    expect(route).not.toContain('createSupabaseAdminClient');
+    expect(route).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
+    expect(route).not.toContain(".from('users')");
+    expect(route).not.toContain('getUserById');
+    expect(route).not.toContain('generateLink');
+    expect(route).not.toContain('sendBrandedEmail');
     expect(route).not.toContain('properties.action_link');
     expect(route).not.toContain('#access_token');
   });
 
+  it('does not expose account existence or provider errors', () => {
+    expect(route).toContain('If this email is authorized, check your inbox for a sign-in link.');
+    expect(route).toContain("console.warn('[auth] Magic-link request was not accepted by the provider.'");
+    expect(route).not.toContain('otpError.message');
+    expect(route).not.toContain('unauthorizedMessage');
+  });
+
   it('keeps admin and client route guards separated', () => {
-    expect(adminLayout).toContain("requireRole('admin')");
-    expect(portalLayout).toContain("requireRole('client')");
+    expect(adminLayout).toContain("requireBootstrapRole('admin')");
+    expect(portalLayout).toContain("requireBootstrapRole('client')");
   });
 });

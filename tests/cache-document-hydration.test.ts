@@ -1,0 +1,12 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+const mocks=vi.hoisted(()=>({headers:vi.fn(),templates:vi.fn()}));
+vi.mock('next/headers',()=>({headers:mocks.headers}));
+vi.mock('@/lib/queries',()=>({getTemplates:mocks.templates}));
+vi.mock('@/lib/auth',()=>({requireRole:vi.fn()}));
+vi.mock('@/lib/meetings',()=>({}));
+vi.mock('@/lib/people',()=>({}));
+vi.mock('@/lib/client-access',()=>({}));
+import { initialScreen } from '@/lib/screen-data';
+beforeEach(()=>{vi.clearAllMocks();mocks.templates.mockResolvedValue([{name:'Lead Assignment'}]);});
+it('hydrates a full document from server data',async()=>{mocks.headers.mockResolvedValue(new Headers({accept:'text/html,application/xhtml+xml'}));expect((await initialScreen('admin','templates'))?.data).toEqual([{name:'Lead Assignment'}]);expect(mocks.templates).toHaveBeenCalledOnce();});
+it('skips business reads on Vinext navigation even after RSC has been stripped',async()=>{mocks.headers.mockResolvedValue(new Headers({accept:'text/x-component'}));expect(await initialScreen('admin','templates')).toBeUndefined();expect(mocks.templates).not.toHaveBeenCalled();});

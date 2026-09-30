@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/auth';
-import { getAvailableSlots } from '@/lib/meetings';
+import { getCachedAvailableSlots } from '@/lib/meetings';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getAuthorizedClientProject } from '@/lib/client-access';
 
@@ -12,8 +12,11 @@ export async function GET(request: Request) {
   const project = await getAuthorizedClientProject(viewer.id, projectId, true);
   if (!project) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
   try {
-    const availability = await getAvailableSlots(project.ownerId, date);
-    const { data: owner } = await createSupabaseAdminClient()!.from('users').select('full_name,admin_settings(display_name)').eq('id', project.ownerId).single();
+    const [availability, ownerResult] = await Promise.all([
+      getCachedAvailableSlots(project.ownerId, date),
+      createSupabaseAdminClient()!.from('users').select('full_name,admin_settings(display_name)').eq('id', project.ownerId).single(),
+    ]);
+    const owner = ownerResult.data;
     const settings = Array.isArray(owner?.admin_settings) ? owner.admin_settings[0] : owner?.admin_settings;
     return NextResponse.json({ ...availability, ownerName: settings?.display_name || owner?.full_name || 'Administrator' });
   }

@@ -10,13 +10,15 @@ describe('production regression protection', () => {
   it('keeps the sign-in request in place and renders an explicit success state', () => {
     expect(signInForm).toContain('event.preventDefault()');
     expect(signInForm).toContain('Check your email');
-    expect(signInForm).toContain('We sent a secure sign-in link to {requestState.email}.');
+    expect(signInForm).toContain('If this email is authorized, check your inbox for a sign-in link.');
+    expect(signInForm).not.toContain('requestState.email');
     expect(signInForm).toContain('finally');
     expect(signInForm).not.toContain("setEmail('')");
   });
 
-  it('uses a safe authorization error without exposing provider details', () => {
-    expect(magicLinkRoute).toContain('This email does not have access to the portal.');
+  it('uses an enumeration-safe success response without exposing provider details', () => {
+    expect(magicLinkRoute).toContain('If this email is authorized, check your inbox for a sign-in link.');
+    expect(magicLinkRoute).not.toContain('This email does not have access to the portal.');
   });
 
   it('does not let optional project aggregates crash the overview', () => {

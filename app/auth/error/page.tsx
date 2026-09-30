@@ -3,10 +3,11 @@ import { WarningCircle } from '@phosphor-icons/react/dist/ssr';
 import { AuthShell } from '@/components/auth/auth-shell';
 
 const messages = {
-  expired: 'This link has expired or has already been used. Ask your administrator to resend the invitation.',
-  invalid: 'This invitation link is incomplete or invalid. Ask your administrator to send a new one.',
+  expired: 'This link has expired or has already been used. Request a new secure sign-in link to continue.',
+  invalid: 'This sign-in link is incomplete or invalid. Request a new secure link to continue.',
   unauthorized: 'This account is not linked to an authorized Leadsedge Portal workspace.',
   configuration: 'Authentication is temporarily unavailable. Please try again later.',
+  different_device: 'This link must be opened in the same browser that requested it. Request a new link and open it on this device.',
 } as const;
 
 export default async function AuthErrorPage({ searchParams }: { searchParams: Promise<{ reason?: string }> }) {

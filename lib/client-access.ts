@@ -46,8 +46,11 @@ export const getAuthorizedClientTask = cache(async (viewerId: string, taskId: st
     .is('archived_at', null)
     .maybeSingle();
   if (error || !task) return null;
-  const project = await getAuthorizedClientProject(viewerId, task.project_id);
-  return project ? { id: task.id, projectId: task.project_id, assigneeId: task.assignee_id, status: task.status } : null;
+  // RLS invokes the hardened can_access_task(), which already requires an
+  // enabled client, direct task assignment, and project membership. Repeating
+  // getAuthorizedClientProject() here added a fully serial remote read without
+  // strengthening the authorization decision.
+  return { id: task.id, projectId: task.project_id, assigneeId: task.assignee_id, status: task.status };
 });
 
 export const getAuthorizedClientMeeting = cache(async (viewerId: string, meetingId: string) => {

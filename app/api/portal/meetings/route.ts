@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireApiRole } from '@/lib/auth';
+import { getViewerWithContact, requireApiRole } from '@/lib/auth';
 import { createGoogleMeetingEvent } from '@/lib/calendar';
 import { getAvailability, getAvailableSlots } from '@/lib/meetings';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -31,7 +31,8 @@ export async function POST(request: Request) {
     if (error || !meeting) return NextResponse.json({ error: error?.message.includes('just booked') ? 'That time was just booked. Choose another slot.' : 'The meeting could not be booked.' }, { status: 409 });
     const { data: client } = await supabase!.from('clients').select('email,full_name').eq('auth_user_id', viewer.id).single();
     try {
-      const event = await createGoogleMeetingEvent(project.ownerId, { title: meeting.title, description: `Client: ${client?.full_name || viewer.fullName}\nProject: ${project.projectName}\nView details in Leadsedge Portal.`, startAt: meeting.start_at, endAt: meeting.end_at, timezone: meeting.timezone, clientEmail: client?.email || viewer.email });
+      const contactViewer = client?.email ? viewer : await getViewerWithContact();
+      const event = await createGoogleMeetingEvent(project.ownerId, { title: meeting.title, description: `Client: ${client?.full_name || viewer.fullName}\nProject: ${project.projectName}\nView details in Leadsedge Portal.`, startAt: meeting.start_at, endAt: meeting.end_at, timezone: meeting.timezone, clientEmail: client?.email || contactViewer?.email || '' });
       if (event) await createSupabaseAdminClient()!.from('meetings').update({ google_event_id: event.id, google_event_html_link: event.htmlLink }).eq('id', meeting.id);
     } catch {
       await createSupabaseAdminClient()!.from('automation_runs').insert({ job_type: 'calendar.event.create', resource_type: 'meeting', resource_id: meeting.id, dedupe_key: `calendar-create:${meeting.id}`, status: 'failed', error_message: 'Google Calendar event creation failed after the internal booking succeeded.', completed_at: new Date().toISOString() });

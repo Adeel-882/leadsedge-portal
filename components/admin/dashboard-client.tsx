@@ -1,4 +1,5 @@
 'use client';
+import { useCacheMutation } from '@/components/cached-screen';
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
@@ -11,6 +12,7 @@ import { formatDate, initials } from '@/lib/format';
 import type { ClientSummary, MeetingRecord, ProjectSummary } from '@/lib/types';
 
 export function DashboardClient({ projects, clients, ownerName, upcomingMeeting }: { projects: ProjectSummary[]; clients: ClientSummary[]; ownerName: string; upcomingMeeting: MeetingRecord | null }) {
+  const invalidate = useCacheMutation();
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'all' | 'active' | 'completed'>('active');
@@ -49,7 +51,7 @@ export function DashboardClient({ projects, clients, ownerName, upcomingMeeting 
       if (!response.ok) throw new Error(result.error || 'Unable to create the project.');
       if (result.warning) setMessage(result.warning);
       else closeModal();
-      router.refresh();
+      await invalidate('project');
       if (result.projectId && !result.warning) router.push(`/admin/projects/${result.projectId}/tasks`);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to create the project.'); }
     finally { setSaving(false); }
@@ -61,7 +63,7 @@ export function DashboardClient({ projects, clients, ownerName, upcomingMeeting 
     const response = await fetch(`/api/admin/projects/${deleteTarget.id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectName: deleteConfirmation, deleteClient }) });
     const result = await response.json() as { error?: string };
     if (!response.ok) setMessage(result.error || 'Project could not be deleted.');
-    else { setDeleteTarget(null); setDeleteConfirmation(''); setActionProjectId(null); router.refresh(); }
+    else { setDeleteTarget(null); setDeleteConfirmation(''); setActionProjectId(null); await invalidate('project'); }
     setSaving(false);
   }
 
@@ -77,7 +79,7 @@ export function DashboardClient({ projects, clients, ownerName, upcomingMeeting 
       const result = await resendProjectInvitation(projectId);
       setInvitationToast({ message: result.message, tone: 'success' });
       setActionProjectId(null);
-      router.refresh();
+      await invalidate('project');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Invitation could not be sent. Please try again.';
       setInvitationToast({ message: errorMessage, tone: 'error' });
@@ -92,7 +94,7 @@ export function DashboardClient({ projects, clients, ownerName, upcomingMeeting 
       <button className="button-primary" onClick={() => setShowModal(true)}><Plus size={16} weight="bold" aria-hidden />New project</button>
     </div>
 
-    {upcomingMeeting && <Link href={`/admin/meetings/${upcomingMeeting.id}`} className="mb-4 flex flex-col gap-3 rounded-[10px] border border-[#cfe0dc] bg-[#edf5f3] p-4 transition hover:border-[#adc9c3] sm:flex-row sm:items-center"><span className="grid h-9 w-9 flex-none place-items-center rounded-lg bg-white text-teal"><CalendarBlank size={18} weight="regular" aria-hidden /></span><div><p className="text-[11px] font-semibold text-teal">Upcoming meeting</p><p className="mt-0.5 text-sm font-bold">{upcomingMeeting.clientName} <span aria-hidden>•</span> {upcomingMeeting.projectName}</p></div><div className="sm:ml-auto sm:text-right"><p className="text-sm font-semibold">{formatDate(upcomingMeeting.startAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: upcomingMeeting.timezone })}</p><p className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted">View meeting <ArrowRight size={12} aria-hidden /></p></div></Link>}
+    {upcomingMeeting && <Link prefetch={false} href={`/admin/meetings/${upcomingMeeting.id}`} className="mb-4 flex flex-col gap-3 rounded-[10px] border border-[#cfe0dc] bg-[#edf5f3] p-4 transition hover:border-[#adc9c3] sm:flex-row sm:items-center"><span className="grid h-9 w-9 flex-none place-items-center rounded-lg bg-white text-teal"><CalendarBlank size={18} weight="regular" aria-hidden /></span><div><p className="text-[11px] font-semibold text-teal">Upcoming meeting</p><p className="mt-0.5 text-sm font-bold">{upcomingMeeting.clientName} <span aria-hidden>•</span> {upcomingMeeting.projectName}</p></div><div className="sm:ml-auto sm:text-right"><p className="text-sm font-semibold">{formatDate(upcomingMeeting.startAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: upcomingMeeting.timezone })}</p><p className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted">View meeting <ArrowRight size={12} aria-hidden /></p></div></Link>}
 
     <div className="metric-strip mb-4">
       <Metric label="Active projects" value={projects.filter((project) => project.status === 'active').length} />
@@ -106,7 +108,7 @@ export function DashboardClient({ projects, clients, ownerName, upcomingMeeting 
         <label className="flex h-10 w-full items-center gap-2 rounded-lg border border-line bg-white px-3 sm:max-w-md"><MagnifyingGlass size={17} className="text-muted" aria-hidden /><span className="sr-only">Search projects or clients</span><input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full bg-transparent text-[13px] outline-none" placeholder="Search projects or clients" /></label>
         <div className="flex rounded-lg bg-[#edf1ef] p-1" role="group" aria-label="Project status filter">{(['active', 'completed', 'all'] as const).map((item) => <button key={item} aria-pressed={status === item} onClick={() => setStatus(item)} className={`rounded-md px-3 py-1.5 text-xs font-semibold capitalize ${status === item ? 'bg-white text-ink shadow-[0_1px_2px_rgba(19,42,35,.08)]' : 'text-muted hover:text-ink'}`}>{item}</button>)}</div>
       </div>
-      <div className="overflow-x-auto"><table className="data-table"><thead><tr><th>Project</th><th>Client</th><th>Owner</th><th>Progress</th><th>Status</th><th>Created</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{visible.map((project) => <tr key={project.id}><td><Link href={`/admin/projects/${project.id}`} className="flex items-center gap-3 font-semibold"><span className="avatar h-9 w-9 bg-[#e6f1ef] text-teal"><FolderOpen size={17} weight="fill" aria-hidden /></span><span>{project.projectName}</span></Link></td><td><span className="flex items-center gap-2"><span className="avatar h-8 w-8 bg-[#eaf0ef] text-[#45635d]">{initials(project.clientName)}</span>{project.clientName}</span></td><td className="text-muted">{project.ownerName}</td><td><ProgressBar completed={project.completedTasks} total={project.totalTasks} /></td><td><StatusBadge status={`${project.status}-project`} /></td><td className="text-muted">{formatDate(project.createdAt)}</td><td className="relative"><button aria-label={`Actions for ${project.projectName}`} aria-expanded={actionProjectId === project.id} className="icon-button" onClick={() => setActionProjectId(actionProjectId === project.id ? null : project.id)}><DotsThreeVertical size={19} weight="bold" aria-hidden /></button>{actionProjectId === project.id && <div className="absolute right-3 z-40 w-60 rounded-lg border border-line bg-white p-1.5 text-left shadow-[0_14px_40px_rgba(19,42,35,.13)]"><Link href={`/admin/projects/${project.id}`} className="flex items-center gap-2 rounded-md px-3 py-2 text-[13px] font-semibold hover:bg-[#f0f3f2]"><FolderOpen size={16} aria-hidden />Open project</Link><button className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] hover:bg-[#f0f3f2] disabled:cursor-not-allowed disabled:opacity-60" disabled={invitationProjectId !== null} onClick={() => resendInvitation(project.id)}><PaperPlaneTilt size={16} aria-hidden />{invitationProjectId === project.id ? 'Sending...' : 'Resend client invitation'}</button><div className="my-1 border-t border-line" /><button className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] hover:bg-[#f0f3f2]" onClick={() => confirmDelete(project, false)}><Trash size={16} aria-hidden />Delete project</button><button className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] text-[#9c4141] hover:bg-[#faeeee]" onClick={() => confirmDelete(project, true)}><UserMinus size={16} aria-hidden />Delete project & client</button></div>}</td></tr>)}</tbody></table></div>
+      <div className="overflow-x-auto"><table className="data-table"><thead><tr><th>Project</th><th>Client</th><th>Owner</th><th>Progress</th><th>Status</th><th>Created</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{visible.map((project) => <tr key={project.id}><td><Link prefetch={false} href={`/admin/projects/${project.id}`} className="flex items-center gap-3 font-semibold"><span className="avatar h-9 w-9 bg-[#e6f1ef] text-teal"><FolderOpen size={17} weight="fill" aria-hidden /></span><span>{project.projectName}</span></Link></td><td><span className="flex items-center gap-2"><span className="avatar h-8 w-8 bg-[#eaf0ef] text-[#45635d]">{initials(project.clientName)}</span>{project.clientName}</span></td><td className="text-muted">{project.ownerName}</td><td><ProgressBar completed={project.completedTasks} total={project.totalTasks} /></td><td><StatusBadge status={`${project.status}-project`} /></td><td className="text-muted">{formatDate(project.createdAt)}</td><td className="relative"><button aria-label={`Actions for ${project.projectName}`} aria-expanded={actionProjectId === project.id} className="icon-button" onClick={() => setActionProjectId(actionProjectId === project.id ? null : project.id)}><DotsThreeVertical size={19} weight="bold" aria-hidden /></button>{actionProjectId === project.id && <div className="absolute right-3 z-40 w-60 rounded-lg border border-line bg-white p-1.5 text-left shadow-[0_14px_40px_rgba(19,42,35,.13)]"><Link prefetch={false} href={`/admin/projects/${project.id}`} className="flex items-center gap-2 rounded-md px-3 py-2 text-[13px] font-semibold hover:bg-[#f0f3f2]"><FolderOpen size={16} aria-hidden />Open project</Link><button className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] hover:bg-[#f0f3f2] disabled:cursor-not-allowed disabled:opacity-60" disabled={invitationProjectId !== null} onClick={() => resendInvitation(project.id)}><PaperPlaneTilt size={16} aria-hidden />{invitationProjectId === project.id ? 'Sending...' : 'Resend client invitation'}</button><div className="my-1 border-t border-line" /><button className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] hover:bg-[#f0f3f2]" onClick={() => confirmDelete(project, false)}><Trash size={16} aria-hidden />Delete project</button><button className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] text-[#9c4141] hover:bg-[#faeeee]" onClick={() => confirmDelete(project, true)}><UserMinus size={16} aria-hidden />Delete project & client</button></div>}</td></tr>)}</tbody></table></div>
       {visible.length === 0 && <div className="p-12 text-center text-sm text-muted">No projects match this view.</div>}
     </section>
 

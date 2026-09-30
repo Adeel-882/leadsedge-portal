@@ -41,11 +41,20 @@ export async function POST(request: Request) {
   const { data: bundle, error: bundleError } = await supabase.rpc('create_project_bundle', { project_name_input: parsed.data.projectName, client_auth_user_id_input: clientAuthUserId, client_full_name_input: fullName, client_email_input: email, client_company_input: company || null }).single();
   if (bundleError || !bundle) return NextResponse.json({ error: 'The project could not be created. No client invitation was sent.' }, { status: 500 });
   const created = bundle as { project_id: string; client_id: string };
+  let crmWarning: string | null = null;
+
+  if (parsed.data.client.mode === 'new' && (parsed.data.client.title || parsed.data.client.phone)) {
+    const { error: crmError } = await supabase.from('clients').update({
+      title: parsed.data.client.title || null,
+      phone: parsed.data.client.phone || null,
+    }).eq('id', created.client_id);
+    if (crmError) crmWarning = 'The person and project were created, but the optional title or phone could not be saved.';
+  }
 
   if (actionLink) {
     const delivery = await sendPortalInvitation({ to: email, clientName: fullName, projectName: parsed.data.projectName, actionLink });
     await admin.from('email_deliveries').insert({ client_id: created.client_id, project_id: created.project_id, email_type: 'client_invitation', provider_id: delivery.ok ? delivery.id : null, status: delivery.ok ? 'sent' : 'failed', error_message: delivery.ok ? null : delivery.error });
     if (!delivery.ok) return NextResponse.json({ projectId: created.project_id, warning: delivery.error }, { status: 201 });
   }
-  return NextResponse.json({ projectId: created.project_id }, { status: 201 });
+  return NextResponse.json({ projectId: created.project_id, ...(crmWarning ? { warning: crmWarning } : {}) }, { status: 201 });
 }

@@ -1,11 +1,11 @@
 'use client';
+import { useCacheMutation } from '@/components/cached-screen';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { CheckCircle, X } from '@phosphor-icons/react';
 
 export function CompleteTaskButton({ taskId }: { taskId: string }) {
-  const router = useRouter();
+  const invalidate = useCacheMutation();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -18,7 +18,7 @@ export function CompleteTaskButton({ taskId }: { taskId: string }) {
     if (!response.ok) setError(result.error || 'Task could not be completed.');
     else {
       setOpen(false);
-      router.refresh();
+      await invalidate('task', taskId);
     }
     setSaving(false);
   }

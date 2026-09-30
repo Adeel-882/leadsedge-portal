@@ -1,4 +1,5 @@
 'use client';
+import { useCacheMutation } from '@/components/cached-screen';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -12,6 +13,7 @@ function today() {
 }
 
 export function MeetingScheduler({ projects }: { projects: ProjectSummary[] }) {
+  const invalidate = useCacheMutation();
   const router = useRouter();
   const [projectId, setProjectId] = useState(projects[0]?.id || '');
   const [date, setDate] = useState('');
@@ -62,7 +64,7 @@ export function MeetingScheduler({ projects }: { projects: ProjectSummary[] }) {
       return;
     }
     router.push(`/portal/meetings/${result.meetingId}`);
-    router.refresh();
+    await invalidate('meeting');
   }
 
   if (!projects.length) return <div className="surface-flat p-6 text-sm text-muted">A project is required before you can schedule a meeting.</div>;

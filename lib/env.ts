@@ -6,6 +6,10 @@ export function hasSupabaseEnv() {
   return hasValue(process.env.NEXT_PUBLIC_SUPABASE_URL) && hasValue(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
+export function hasPublicAuthEnv() {
+  return hasSupabaseEnv() && hasValue(process.env.NEXT_PUBLIC_APP_URL);
+}
+
 export function hasServiceRoleEnv() {
   return hasSupabaseEnv() && hasValue(process.env.SUPABASE_SERVICE_ROLE_KEY);
 }

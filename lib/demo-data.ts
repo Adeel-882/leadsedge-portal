@@ -5,9 +5,9 @@ export const demoClientViewer: Viewer = { id: '00000000-0000-4000-8000-000000000
 export const demoClient: ClientSummary = { id: '00000000-0000-4000-8000-000000000010', authUserId: demoClientViewer.id, fullName: 'Adeel Ahmed', email: demoClientViewer.email, company: 'Demo Client', status: 'active' };
 
 export const demoProjects: ProjectSummary[] = [
-  { id: '00000000-0000-4000-8000-000000000100', projectName: 'Adeel Ahmed', ownerName: 'Admin', clientName: 'Adeel Ahmed', clientId: demoClient.id, status: 'active', completedTasks: 0, totalTasks: 1, createdAt: '2026-08-25T10:00:00.000Z' },
-  { id: '00000000-0000-4000-8000-000000000101', projectName: 'Northstar Realty', ownerName: 'Admin', clientName: 'Maya Chen', clientId: '00000000-0000-4000-8000-000000000011', status: 'active', completedTasks: 1, totalTasks: 4, createdAt: '2026-08-23T10:00:00.000Z' },
-  { id: '00000000-0000-4000-8000-000000000102', projectName: 'Oak & Co.', ownerName: 'Admin', clientName: 'Jordan Bell', clientId: '00000000-0000-4000-8000-000000000012', status: 'completed', completedTasks: 4, totalTasks: 4, createdAt: '2026-08-18T10:00:00.000Z' },
+  { id: '00000000-0000-4000-8000-000000000100', projectName: 'Adeel Ahmed', ownerName: 'Admin', clientName: 'Adeel Ahmed', clientId: demoClient.id, status: 'active', completedTasks: 0, totalTasks: 1, createdAt: '2026-08-25T10:00:00.000Z', isPrimary: true },
+  { id: '00000000-0000-4000-8000-000000000101', projectName: 'Northstar Realty', ownerName: 'Admin', clientName: 'Maya Chen', clientId: '00000000-0000-4000-8000-000000000011', status: 'active', completedTasks: 1, totalTasks: 4, createdAt: '2026-08-23T10:00:00.000Z', isPrimary: false },
+  { id: '00000000-0000-4000-8000-000000000102', projectName: 'Oak & Co.', ownerName: 'Admin', clientName: 'Jordan Bell', clientId: '00000000-0000-4000-8000-000000000012', status: 'completed', completedTasks: 4, totalTasks: 4, createdAt: '2026-08-18T10:00:00.000Z', isPrimary: false },
 ];
 
 export const leadFeedbackForm: FormField[] = [

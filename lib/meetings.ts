@@ -19,6 +19,9 @@ type MeetingRow = {
   owner: { full_name: string } | { full_name: string }[] | null;
 };
 
+const availabilityCache = new Map<string, { expiresAt: number; value: { settings: AvailabilitySettings | null; slots: MeetingSlot[] } }>();
+const AVAILABILITY_CACHE_TTL_MS = 60_000;
+
 function first<T>(value: T | T[] | null) { return Array.isArray(value) ? value[0] : value; }
 function mapMeeting(row: MeetingRow): MeetingRecord {
   return { id: row.id, projectId: row.project_id, projectName: first(row.project)?.project_name || 'Project', clientId: row.client_id, clientName: first(row.client)?.full_name || 'Client', ownerId: row.owner_id, ownerName: row.owner_display_name || first(row.owner)?.full_name || 'Administrator', title: row.title || 'Meeting', description: row.description || '', startAt: row.start_at, endAt: row.end_at, timezone: row.timezone || 'UTC', durationMinutes: Number(row.duration_minutes || 30), status: row.status || 'scheduled', googleEventHtmlLink: row.google_event_html_link || null, cancellationReason: row.cancellation_reason || null, cancelledAt: row.cancelled_at || null };
@@ -142,4 +145,17 @@ export async function getAvailableSlots(ownerId: string, dateValue: string): Pro
     slots.push({ startAt: startDate.toISOString(), endAt: new Date(slotEnd).toISOString(), label: new Intl.DateTimeFormat('en-US', { timeZone: settings.timezone, hour: 'numeric', minute: '2-digit' }).format(startDate) });
   }
   return { settings, slots };
+}
+
+export async function getCachedAvailableSlots(ownerId: string, dateValue: string) {
+  const key = `${ownerId}:${dateValue}`;
+  const cached = availabilityCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const value = await getAvailableSlots(ownerId, dateValue);
+  availabilityCache.set(key, { expiresAt: Date.now() + AVAILABILITY_CACHE_TTL_MS, value });
+  if (availabilityCache.size > 200) {
+    const now = Date.now();
+    for (const [entryKey, entry] of availabilityCache) if (entry.expiresAt <= now) availabilityCache.delete(entryKey);
+  }
+  return value;
 }

@@ -32,6 +32,39 @@ export type ProjectSummary = {
   completedTasks: number;
   totalTasks: number;
   createdAt: string;
+  /** This viewer's membership flag, not a property of the project itself. */
+  isPrimary: boolean;
+};
+
+/**
+ * One openable conversation in the client Messages inbox. Every unread message
+ * the navigation badge counts belongs to exactly one of these, so the badge can
+ * never point at something the client has no route to.
+ */
+export type ConversationThread = {
+  kind: 'project' | 'task';
+  id: string;
+  title: string;
+  projectId: string;
+  projectName: string;
+  unreadCount: number;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  lastSenderName?: string | null;
+};
+
+export type MessageWorkspaceThread = {
+  key: string;
+  kind: 'project' | 'task';
+  resourceId: string;
+  projectId: string;
+  title: string;
+  projectName: string;
+  clientName: string | null;
+  senderName: string | null;
+  preview: string | null;
+  lastMessageAt: string | null;
+  unreadCount: number;
 };
 
 export type FormField = {

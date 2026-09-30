@@ -1,11 +1,19 @@
 import { z } from 'zod';
+import { FEEDBACK_DELAY_MAX, FEEDBACK_DELAY_MIN } from './scheduling';
 
 export const projectCreateSchema = z.object({
   projectName: z.string().trim().min(2).max(120),
   client: z.discriminatedUnion('mode', [
-    z.object({ mode: z.literal('new'), fullName: z.string().trim().min(2).max(120), email: z.string().trim().email().max(255), company: z.string().trim().max(160).optional() }),
+    z.object({ mode: z.literal('new'), fullName: z.string().trim().min(2).max(120), email: z.string().trim().email().max(255), company: z.string().trim().max(160).optional(), title: z.string().trim().max(160).optional(), phone: z.string().trim().max(40).optional() }),
     z.object({ mode: z.literal('existing'), clientId: z.string().uuid() }),
   ]),
+});
+
+export const personUpdateSchema = z.object({
+  fullName: z.string().trim().min(2).max(120),
+  company: z.string().trim().max(160),
+  title: z.string().trim().max(160),
+  phone: z.string().trim().max(40),
 });
 
 export const templateImportSchema = z.object({ projectId: z.string().uuid(), templateId: z.string().uuid(), templateTaskIds: z.array(z.string().uuid()).min(1), initialStatus: z.enum(['draft', 'active']).default('draft') });
@@ -19,7 +27,8 @@ const formFieldSchema = z.object({
 
 export const feedbackConfigurationSchema = z.object({
   enabled: z.boolean(),
-  delayValue: z.number().int().min(1).max(10),
+  // Bounds shared with the editor and the database CHECK constraint.
+  delayValue: z.number().int().min(FEEDBACK_DELAY_MIN).max(FEEDBACK_DELAY_MAX),
   delayUnit: z.enum(['minutes', 'hours', 'days']),
   formSchema: z.array(formFieldSchema).min(1).max(30),
 });

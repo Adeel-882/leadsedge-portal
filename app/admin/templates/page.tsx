@@ -1,6 +1,4 @@
-import { TemplatesClient } from '@/components/admin/templates-client';
-import { getTemplates } from '@/lib/queries';
-
-export default async function TemplatesPage() {
-  return <TemplatesClient templates={await getTemplates()} />;
-}
+import { CachedTemplates } from '@/components/cache/admin';
+import { requireRole } from '@/lib/auth';
+import { initialScreen } from '@/lib/screen-data';
+export default async function Page() { await requireRole('admin'); return <CachedTemplates initial={await initialScreen('admin','templates')}/>; }

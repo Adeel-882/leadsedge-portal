@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { SetupAdminForm } from '@/components/setup-admin-form';
-import { administratorExists, getViewer } from '@/lib/auth';
+import { administratorExists, getViewerWithContact } from '@/lib/auth';
 import { getServerEnvironmentStatus } from '@/lib/env';
 
 export default async function SetupPage() {
   const environment = getServerEnvironmentStatus();
   const [viewer, adminExists] = environment.demoMode || !environment.supabaseConfigured
     ? [null, environment.demoMode ? true : null]
-    : await Promise.all([getViewer(), administratorExists()]);
+    : await Promise.all([getViewerWithContact(), administratorExists()]);
 
   let content: React.ReactNode;
   if (environment.demoMode) {

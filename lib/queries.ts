@@ -4,7 +4,8 @@ import { demoActivity, demoClient, demoNotifications, demoProjectMessages, demoP
 import { isDemoMode } from './env';
 import { createSupabaseServerClient } from './supabase/server';
 import { getViewer } from './auth';
-import type { ActivityEvent, AdminConversationSummary, ClientSummary, ClientTaskSummary, ConversationMessage, FeedbackState, FeedbackSubmission, FormField, NotificationRecord, ProjectSummary, TaskRecord, TemplateSummary, TemplateTaskRecord, Viewer } from './types';
+import { orderClientProjects } from './project-order';
+import type { ActivityEvent, AdminConversationSummary, ClientSummary, ClientTaskSummary, ConversationMessage, ConversationThread, FeedbackState, FeedbackSubmission, FormField, NotificationRecord, ProjectSummary, TaskRecord, TemplateSummary, TemplateTaskRecord, Viewer } from './types';
 
 const safeRichTextOptions: sanitizeHtml.IOptions = {
   allowedTags: ['p', 'br', 'h2', 'h3', 'strong', 'em', 'ul', 'ol', 'li', 'a'],
@@ -50,6 +51,7 @@ export async function getAdminProjects(): Promise<ProjectSummary[]> {
       completedTasks: tasks.filter((task) => task.status === 'completed').length,
       totalTasks: tasks.length,
       createdAt: row.created_at,
+      isPrimary: Boolean(primaryLink?.is_primary),
     };
   });
 }
@@ -75,7 +77,7 @@ const getProjectForRequest = cache(async (projectId: string): Promise<ProjectSum
   const primaryLink = links.find((link) => link.is_primary) || links[0];
   const client = Array.isArray(primaryLink?.client) ? primaryLink.client[0] : primaryLink?.client;
   const tasks = (row.project_tasks || []).filter((task) => !task.archived_at);
-  return { id: row.id, projectName: row.project_name, ownerName: firstSettings?.display_name || owner?.full_name || 'Admin', clientName: client?.full_name || 'Unassigned', clientId: client?.id || '', status: row.status, completedTasks: tasks.filter((task) => task.status === 'completed').length, totalTasks: tasks.length, createdAt: row.created_at };
+  return { id: row.id, projectName: row.project_name, ownerName: firstSettings?.display_name || owner?.full_name || 'Admin', clientName: client?.full_name || 'Unassigned', clientId: client?.id || '', status: row.status, completedTasks: tasks.filter((task) => task.status === 'completed').length, totalTasks: tasks.length, createdAt: row.created_at, isPrimary: Boolean(primaryLink?.is_primary) };
 });
 
 export async function getAdminClients(): Promise<ClientSummary[]> {
@@ -141,11 +143,17 @@ export async function getProjectTasks(projectId: string, clientOnly = false): Pr
   });
 }
 
-export async function getTask(taskId: string): Promise<TaskRecord | null> {
+export async function getTask(taskId: string, authorizedViewerId?: string): Promise<TaskRecord | null> {
   if (isDemoMode()) return demoTasks.find((task) => task.id === taskId) || null;
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
-  const { data: row, error } = await supabase.from('project_tasks').select('id,project_id,title,description,task_type,status,client_visible,requires_completion,assignee_id,due_at,activated_at,completed_at,created_at,form_schema,feedback_enabled,feedback_delay_value,feedback_delay_unit,feedback_state,feedback_scheduled_for,feedback_requested_at,feedback_submitted_at,assignee:clients(full_name)').eq('id', taskId).is('archived_at', null).maybeSingle();
+  // Same filters as getAuthorizedClientTask, combined with the full cold-screen row.
+  // Admin callers retain the left join so unassigned tasks remain visible.
+  let query = authorizedViewerId
+    ? supabase.from('project_tasks').select('id,project_id,title,description,task_type,status,client_visible,requires_completion,assignee_id,due_at,activated_at,completed_at,created_at,form_schema,feedback_enabled,feedback_delay_value,feedback_delay_unit,feedback_state,feedback_scheduled_for,feedback_requested_at,feedback_submitted_at,assignee:clients!inner(full_name)')
+    : supabase.from('project_tasks').select('id,project_id,title,description,task_type,status,client_visible,requires_completion,assignee_id,due_at,activated_at,completed_at,created_at,form_schema,feedback_enabled,feedback_delay_value,feedback_delay_unit,feedback_state,feedback_scheduled_for,feedback_requested_at,feedback_submitted_at,assignee:clients(full_name)');
+  if (authorizedViewerId) query = query.eq('assignee.auth_user_id', authorizedViewerId).neq('assignee.status', 'disabled').eq('client_visible', true).neq('status', 'draft');
+  const { data: row, error } = await query.eq('id', taskId).is('archived_at', null).maybeSingle();
   if (error || !row) return null;
   const assignee = Array.isArray(row.assignee) ? row.assignee[0] : row.assignee;
   const enabled = Boolean(row.feedback_enabled);
@@ -202,28 +210,38 @@ export async function getTemplateDetail(templateId: string): Promise<{ template:
   };
 }
 
-export async function getTaskMessages(taskId: string): Promise<ConversationMessage[]> {
-  if (isDemoMode()) return demoTaskMessages;
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) return [];
-  const { data, error } = await supabase.from('task_messages').select('id,sender_id,body,attachment_url,created_at,sender:users(full_name,role)').eq('task_id', taskId).eq('message_type', 'user').order('created_at');
-  if (error) throw new Error('Unable to load task conversation.');
-  return (data || []).map((row) => {
+const MESSAGE_PAGE_SIZE = 50;
+// Bounded window used only to show a preview and a last-activity time per thread.
+// Unread counts never come from this sample; they come from read receipts.
+const CONVERSATION_ACTIVITY_SAMPLE = 400;
+
+function mapMessages(rows: Array<{ id: string; sender_id: string; body: string; attachment_url: string | null; created_at: string; sender: { full_name: string; role: string } | { full_name: string; role: string }[] | null }>): ConversationMessage[] {
+  return rows.map((row) => {
     const sender = Array.isArray(row.sender) ? row.sender[0] : row.sender;
-    return { id: row.id, senderId: row.sender_id, senderName: sender?.full_name || 'Member', senderRole: sender?.role || 'client', body: row.body, attachmentUrl: row.attachment_url, createdAt: row.created_at };
+    return { id: row.id, senderId: row.sender_id, senderName: sender?.full_name || 'Member', senderRole: sender?.role === 'admin' ? 'admin' : 'client', body: row.body, attachmentUrl: row.attachment_url, createdAt: row.created_at };
   });
 }
 
-export async function getProjectMessages(projectId: string): Promise<ConversationMessage[]> {
+export async function getTaskMessages(taskId: string, before?: string): Promise<ConversationMessage[]> {
+  if (isDemoMode()) return demoTaskMessages;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return [];
+  let query = supabase.from('task_messages').select('id,sender_id,body,attachment_url,created_at,sender:users(full_name,role)').eq('task_id', taskId).eq('message_type', 'user').order('created_at', { ascending: false }).limit(MESSAGE_PAGE_SIZE);
+  if (before) query = query.lt('created_at', before);
+  const { data, error } = await query;
+  if (error) throw new Error('Unable to load task conversation.');
+  return mapMessages((data || []).reverse());
+}
+
+export async function getProjectMessages(projectId: string, before?: string): Promise<ConversationMessage[]> {
   if (isDemoMode()) return demoProjectMessages;
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
-  const { data, error } = await supabase.from('project_messages').select('id,sender_id,body,attachment_url,created_at,sender:users(full_name,role)').eq('project_id', projectId).eq('message_type', 'user').order('created_at');
+  let query = supabase.from('project_messages').select('id,sender_id,body,attachment_url,created_at,sender:users(full_name,role)').eq('project_id', projectId).eq('message_type', 'user').order('created_at', { ascending: false }).limit(MESSAGE_PAGE_SIZE);
+  if (before) query = query.lt('created_at', before);
+  const { data, error } = await query;
   if (error) throw new Error('Unable to load project conversation.');
-  return (data || []).map((row) => {
-    const sender = Array.isArray(row.sender) ? row.sender[0] : row.sender;
-    return { id: row.id, senderId: row.sender_id, senderName: sender?.full_name || 'Member', senderRole: sender?.role || 'client', body: row.body, attachmentUrl: row.attachment_url, createdAt: row.created_at };
-  });
+  return mapMessages((data || []).reverse());
 }
 
 export async function getTaskActivity(taskId: string): Promise<ActivityEvent[]> {
@@ -293,18 +311,123 @@ export async function getClientProjects(activeOnly = false): Promise<ProjectSumm
   if (!supabase) return [];
   const viewer = await getViewer();
   if (!viewer || viewer.role !== 'client') return [];
-  let query = supabase.from('projects').select('id,project_name,status,created_at,owner:users!projects_owner_id_fkey(full_name,admin_settings(display_name)),project_clients!inner(client:clients!inner(id,full_name,auth_user_id,status)),project_tasks(status,archived_at)').eq('project_clients.client.auth_user_id', viewer.id).neq('project_clients.client.status', 'disabled');
+  let query = supabase.from('projects').select('id,project_name,status,created_at,owner:users!projects_owner_id_fkey(full_name,admin_settings(display_name)),project_clients!inner(is_primary,client:clients!inner(id,full_name,auth_user_id,status)),project_tasks(status,archived_at)').eq('project_clients.client.auth_user_id', viewer.id).neq('project_clients.client.status', 'disabled');
   if (activeOnly) query = query.eq('status', 'active');
-  const { data, error } = await query.order('created_at', { ascending: false });
+  const { data, error } = await query.order('created_at', { ascending: true });
   if (error) throw new Error('Unable to load your projects.');
-  return (data || []).map((row) => {
+  const projects = (data || []).map((row) => {
     const owner = Array.isArray(row.owner) ? row.owner[0] : row.owner;
     const settings = Array.isArray(owner?.admin_settings) ? owner?.admin_settings[0] : owner?.admin_settings;
+    // The embedded membership is filtered to this viewer, so is_primary here is
+    // this client's own flag rather than some other client's on a shared project.
     const link = row.project_clients?.[0];
     const client = Array.isArray(link?.client) ? link.client[0] : link?.client;
     const tasks = (row.project_tasks || []).filter((task) => !task.archived_at);
-    return { id: row.id, projectName: row.project_name, ownerName: settings?.display_name || owner?.full_name || 'Admin', clientName: client?.full_name || '', clientId: client?.id || '', status: row.status, completedTasks: tasks.filter((task) => task.status === 'completed').length, totalTasks: tasks.length, createdAt: row.created_at };
+    return { id: row.id, projectName: row.project_name, ownerName: settings?.display_name || owner?.full_name || 'Admin', clientName: client?.full_name || '', clientId: client?.id || '', status: row.status, completedTasks: tasks.filter((task) => task.status === 'completed').length, totalTasks: tasks.length, createdAt: row.created_at, isPrimary: Boolean(link?.is_primary) };
   });
+  // One shared definition of the default project, matching get_portal_bootstrap().
+  return orderClientProjects(projects.map((project) => ({ ...project, createdAt: project.createdAt })));
+}
+
+/**
+ * Every conversation the client can open, with the unread counts that make up
+ * the navigation badge.
+ *
+ * The badge counts unread project messages *and* unread task comments across
+ * all of the client's projects, so the inbox has to inventory both. Unread
+ * counts are exact: they come from this viewer's own read receipts, joined to
+ * the messages themselves so row level security drops anything the client is
+ * not entitled to — the same set `get_unread_message_count()` counts.
+ */
+export async function getClientConversationThreads(): Promise<ConversationThread[]> {
+  if (isDemoMode()) return [];
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return [];
+  const viewer = await getViewer();
+  if (!viewer || viewer.role !== 'client') return [];
+
+  // Each read is already authorized by the user's session/RLS. Empty inner
+  // embeds retain explicit client filters without serially acquiring ID lists.
+  const [projects, tasks, receiptResult, projectActivity, taskActivity] = await Promise.all([
+    getClientProjects(),
+    getClientTaskList(),
+    supabase.from('message_read_receipts')
+      .select('project_message:project_messages(project_id,message_type),task_message:task_messages(task_id,message_type)')
+      .is('read_at', null),
+    supabase.from('project_messages')
+      .select('project_id,body,created_at,sender:users(full_name),project:projects!inner(project_clients!inner(client:clients!inner()))')
+      .eq('project.project_clients.client.auth_user_id', viewer.id)
+      .neq('project.project_clients.client.status', 'disabled')
+      .eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
+    supabase.from('task_messages')
+      .select('task_id,body,created_at,sender:users(full_name),task:project_tasks!inner(assignee:clients!inner())')
+      .eq('task.assignee.auth_user_id', viewer.id).neq('task.assignee.status', 'disabled')
+      .eq('task.client_visible', true).neq('task.status', 'draft').is('task.archived_at', null)
+      .eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
+  ]);
+  if (receiptResult.error || projectActivity.error || taskActivity.error) throw new Error('Unable to load your conversations.');
+  if (!projects.length) return [];
+  const projectNameById = new Map(projects.map((project) => [project.id, project.projectName]));
+
+  const unreadByProject = new Map<string, number>();
+  const unreadByTask = new Map<string, number>();
+  for (const receipt of receiptResult.data || []) {
+    const projectMessage = Array.isArray(receipt.project_message) ? receipt.project_message[0] : receipt.project_message;
+    const taskMessage = Array.isArray(receipt.task_message) ? receipt.task_message[0] : receipt.task_message;
+    // A receipt whose message is null was filtered out by row level security, and
+    // a non-user message is not counted by the badge either.
+    if (projectMessage?.project_id && projectMessage.message_type === 'user') {
+      unreadByProject.set(projectMessage.project_id, (unreadByProject.get(projectMessage.project_id) || 0) + 1);
+    } else if (taskMessage?.task_id && taskMessage.message_type === 'user') {
+      unreadByTask.set(taskMessage.task_id, (unreadByTask.get(taskMessage.task_id) || 0) + 1);
+    }
+  }
+
+  // Previews are a convenience, not the source of truth: they come from a bounded
+  // recent window, so a very long-running conversation may list without one while
+  // its unread count stays exact.
+  const latest = <T extends { body: string; created_at: string; sender?: { full_name: string } | { full_name: string }[] | null }>(rows: T[] | null, key: (row: T) => string) => {
+    const map = new Map<string, { body: string; createdAt: string; senderName: string | null }>();
+    for (const row of rows || []) {
+      if (map.has(key(row))) continue;
+      const sender = Array.isArray(row.sender) ? row.sender[0] : row.sender;
+      map.set(key(row), { body: row.body, createdAt: row.created_at, senderName: sender?.full_name || null });
+    }
+    return map;
+  };
+  const projectLatest = latest(projectActivity.data, (row) => row.project_id);
+  const taskLatest = latest(taskActivity.data as Array<{ task_id: string; body: string; created_at: string; sender?: { full_name: string } | { full_name: string }[] | null }> | null, (row) => row.task_id);
+
+  const projectThreads: ConversationThread[] = projects.map((project) => ({
+    kind: 'project',
+    id: project.id,
+    title: project.projectName,
+    projectId: project.id,
+    projectName: project.projectName,
+    unreadCount: unreadByProject.get(project.id) || 0,
+    lastMessageAt: projectLatest.get(project.id)?.createdAt || null,
+    lastMessagePreview: projectLatest.get(project.id)?.body || null,
+    lastSenderName: projectLatest.get(project.id)?.senderName || null,
+  }));
+
+  // A lead only earns an inbox row once it has a conversation, so an untouched
+  // task list does not bury the project threads.
+  const taskThreads: ConversationThread[] = tasks
+    .filter((task) => (unreadByTask.get(task.id) || 0) > 0 || taskLatest.has(task.id))
+    .map((task) => ({
+      kind: 'task' as const,
+      id: task.id,
+      title: task.title,
+      projectId: task.projectId,
+      projectName: projectNameById.get(task.projectId) || task.projectName,
+      unreadCount: unreadByTask.get(task.id) || 0,
+      lastMessageAt: taskLatest.get(task.id)?.createdAt || null,
+      lastMessagePreview: taskLatest.get(task.id)?.body || null,
+      lastSenderName: taskLatest.get(task.id)?.senderName || null,
+    }))
+    .sort((a, b) => (b.unreadCount - a.unreadCount) || (b.lastMessageAt || '').localeCompare(a.lastMessageAt || ''));
+
+  return [...projectThreads, ...taskThreads];
 }
 
 export async function getClientTaskList(): Promise<ClientTaskSummary[]> {
@@ -313,7 +436,7 @@ export async function getClientTaskList(): Promise<ClientTaskSummary[]> {
   if (!supabase) return [];
   const viewer = await getViewer();
   if (!viewer || viewer.role !== 'client') return [];
-  const { data, error } = await supabase.from('project_tasks').select('id,project_id,title,status,feedback_state,feedback_submitted_at,project:projects(project_name),assignee:clients!inner(auth_user_id,status)').eq('assignee.auth_user_id', viewer.id).neq('assignee.status', 'disabled').is('archived_at', null).eq('client_visible', true).neq('status', 'draft').order('created_at');
+  const { data, error } = await supabase.from('project_tasks').select('id,project_id,title,status,feedback_state,feedback_submitted_at,project:projects(project_name),assignee:clients!inner()').eq('assignee.auth_user_id', viewer.id).neq('assignee.status', 'disabled').is('archived_at', null).eq('client_visible', true).neq('status', 'draft').order('created_at');
   if (error) throw new Error('Unable to load your tasks.');
   return (data || []).map((row) => {
     const project = Array.isArray(row.project) ? row.project[0] : row.project;
@@ -329,20 +452,38 @@ export async function getAdminMessageInbox(): Promise<AdminConversationSummary[]
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
   const [projectResult, taskResult, unreadResult] = await Promise.all([
-    supabase.from('project_messages').select('id,project_id,body,created_at,sender:users(full_name),project:projects(project_name)').eq('message_type', 'user').order('created_at', { ascending: false }),
-    supabase.from('task_messages').select('id,task_id,body,created_at,sender:users(full_name),task:project_tasks!inner(title,project_id,archived_at,project:projects(project_name))').eq('message_type', 'user').order('created_at', { ascending: false }),
-    supabase.from('message_read_receipts').select('project_message_id,task_message_id').is('read_at', null),
+    supabase.from('project_messages').select('project_id,body,created_at,sender:users(full_name),project:projects(project_name)').eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
+    supabase.from('task_messages').select('task_id,body,created_at,sender:users(full_name),task:project_tasks!inner(title,project_id,archived_at,project:projects(project_name))').eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
+    supabase.from('message_read_receipts').select('project_message:project_messages(project_id,message_type,body,created_at,sender:users(full_name),project:projects(project_name)),task_message:task_messages(task_id,message_type,body,created_at,sender:users(full_name),task:project_tasks!inner(title,project_id,archived_at,project:projects(project_name)))').is('read_at', null),
   ]);
   if (projectResult.error || taskResult.error || unreadResult.error) throw new Error('Unable to load message inbox.');
-  const unreadProjectMessageIds = new Set((unreadResult.data || []).map((item) => item.project_message_id).filter(Boolean));
-  const unreadTaskMessageIds = new Set((unreadResult.data || []).map((item) => item.task_message_id).filter(Boolean));
   const projectUnreadCounts = new Map<string, number>();
   const taskUnreadCounts = new Map<string, number>();
-  for (const row of projectResult.data || []) {
-    if (unreadProjectMessageIds.has(row.id)) projectUnreadCounts.set(row.project_id, (projectUnreadCounts.get(row.project_id) || 0) + 1);
-  }
-  for (const row of taskResult.data || []) {
-    if (unreadTaskMessageIds.has(row.id)) taskUnreadCounts.set(row.task_id, (taskUnreadCounts.get(row.task_id) || 0) + 1);
+  const unreadProjectLatest = new Map<string, AdminConversationSummary>();
+  const unreadTaskLatest = new Map<string, AdminConversationSummary>();
+  for (const receipt of unreadResult.data || []) {
+    const projectMessage = Array.isArray(receipt.project_message) ? receipt.project_message[0] : receipt.project_message;
+    const taskMessage = Array.isArray(receipt.task_message) ? receipt.task_message[0] : receipt.task_message;
+    if (projectMessage?.project_id && projectMessage.message_type === 'user') {
+      projectUnreadCounts.set(projectMessage.project_id, (projectUnreadCounts.get(projectMessage.project_id) || 0) + 1);
+      const current = unreadProjectLatest.get(projectMessage.project_id);
+      if (!current || Date.parse(projectMessage.created_at) > Date.parse(current.lastMessageAt)) {
+        const sender = Array.isArray(projectMessage.sender) ? projectMessage.sender[0] : projectMessage.sender;
+        const project = Array.isArray(projectMessage.project) ? projectMessage.project[0] : projectMessage.project;
+        unreadProjectLatest.set(projectMessage.project_id, { kind: 'project', resourceId: projectMessage.project_id, projectId: projectMessage.project_id, projectName: project?.project_name || 'Project', taskTitle: null, senderName: sender?.full_name || 'Member', preview: projectMessage.body, lastMessageAt: projectMessage.created_at, unreadCount: 0, href: `/admin/projects/${projectMessage.project_id}/chat` });
+      }
+    } else if (taskMessage?.task_id && taskMessage.message_type === 'user') {
+      taskUnreadCounts.set(taskMessage.task_id, (taskUnreadCounts.get(taskMessage.task_id) || 0) + 1);
+      const task = Array.isArray(taskMessage.task) ? taskMessage.task[0] : taskMessage.task;
+      if (task && !task.archived_at) {
+        const current = unreadTaskLatest.get(taskMessage.task_id);
+        if (!current || Date.parse(taskMessage.created_at) > Date.parse(current.lastMessageAt)) {
+          const sender = Array.isArray(taskMessage.sender) ? taskMessage.sender[0] : taskMessage.sender;
+          const project = Array.isArray(task.project) ? task.project[0] : task.project;
+          unreadTaskLatest.set(taskMessage.task_id, { kind: 'task', resourceId: taskMessage.task_id, projectId: task.project_id, projectName: project?.project_name || 'Project', taskTitle: task.title || 'Task', senderName: sender?.full_name || 'Member', preview: taskMessage.body, lastMessageAt: taskMessage.created_at, unreadCount: 0, href: `/admin/projects/${task.project_id}/tasks/${taskMessage.task_id}#conversation` });
+        }
+      }
+    }
   }
   const items = new Map<string, AdminConversationSummary>();
   for (const row of projectResult.data || []) {
@@ -360,6 +501,10 @@ export async function getAdminMessageInbox(): Promise<AdminConversationSummary[]
     if (!task || task.archived_at) continue;
     const project = Array.isArray(task?.project) ? task.project[0] : task?.project;
     items.set(key, { kind: 'task', resourceId: row.task_id, projectId: task?.project_id || '', projectName: project?.project_name || 'Project', taskTitle: task?.title || 'Task', senderName: sender?.full_name || 'Member', preview: row.body, lastMessageAt: row.created_at, unreadCount: taskUnreadCounts.get(row.task_id) || 0, href: `/admin/projects/${task?.project_id}/tasks/${row.task_id}#conversation` });
+  }
+  for (const summary of [...unreadProjectLatest.values(), ...unreadTaskLatest.values()]) {
+    const key = `${summary.kind}:${summary.resourceId}`;
+    if (!items.has(key)) items.set(key, { ...summary, unreadCount: summary.kind === 'project' ? projectUnreadCounts.get(summary.resourceId) || 0 : taskUnreadCounts.get(summary.resourceId) || 0 });
   }
   return [...items.values()].sort((a, b) => Number(b.unreadCount > 0) - Number(a.unreadCount > 0) || Date.parse(b.lastMessageAt) - Date.parse(a.lastMessageAt));
 }
