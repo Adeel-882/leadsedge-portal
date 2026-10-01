@@ -137,12 +137,20 @@ export class RealtimeSync {
   reconcile() {
     if (!this.alive) return;
     this.communicationChanged();
+    this.projectActivityChanged();
     for (const resource of ['tasks', 'home', 'dashboard']) this.enqueue(resource);
     for (const query of this.client.getQueryCache().findAll({ queryKey: this.key('task') })) {
       if (query.getObserversCount()) this.enqueue('task', String(query.queryKey[4]));
       else void this.client.invalidateQueries({queryKey:query.queryKey,exact:true,refetchType:'none'});
     }
     for (const key of this.open.keys()) { this.newestQueue.add(key); this.requestRead(key); }
+  }
+
+  private projectActivityChanged(projectId?: string) {
+    if (this.identity.role !== 'admin') return;
+    for (const query of this.client.getQueryCache().findAll({ queryKey: this.key('project-activity') })) {
+      if (!projectId || query.queryKey[4] === projectId) this.enqueue('project-activity', String(query.queryKey[4]));
+    }
   }
 
   private inventory() { return this.client.getQueryData<Inventory>(this.key('conversations')); }
@@ -167,6 +175,7 @@ export class RealtimeSync {
     if (table === 'notifications') { if (row.user_id === this.identity.id) { this.enqueue('unread'); this.enqueue('home'); } return; }
     if (table === 'project_tasks') {
       if (!uuid(row.project_id)) return;
+      this.projectActivityChanged(row.project_id);
       if (!this.taskScope(row)) {
         // An event is only a hint. Unknown IDs never populate task data; an active
         // authorized list can discover a newly assigned task through its own API.
@@ -182,6 +191,7 @@ export class RealtimeSync {
     const kind = table === 'task_messages' ? 'task' : 'project';
     const id = row[kind + '_id'];
     if (!uuid(id) || !uuid(row.sender_id) || typeof row.body !== 'string' || typeof row.created_at !== 'string' || !Number.isFinite(Date.parse(row.created_at))) return;
+    this.projectActivityChanged(kind === 'project' ? id : this.inventory()?.threads.find(t => t.kind === 'task' && t.resourceId === id)?.projectId);
     const eventId = `${table}:${row.id}`;
     if (this.seen.has(eventId)) return;
     this.seen.add(eventId); if (this.seen.size > 1000) this.seen.delete(this.seen.values().next().value!);

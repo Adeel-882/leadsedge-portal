@@ -1,3 +1,4 @@
+import { deliverAssignmentEmails } from './assignment-email';
 import { sendBrandedEmail } from './email';
 import { appUrl } from './env';
 import { createSupabaseAdminClient } from './supabase/admin';
@@ -18,8 +19,9 @@ export async function processAutomationWork(limit = 20) {
       await admin.from('email_outbox').insert({ user_id: recipient.userId, client_id: recipient.dedupe === 'client' ? meeting.client_id : null, project_id: meeting.project_id, meeting_id: meeting.id, email_type: 'meeting.reminder', recipient_email: recipient.email, template_data: { clientName: recipient.name, title: meeting.title, startAt: meeting.start_at, timezone: meeting.timezone, targetUrl: recipient.targetUrl }, dedupe_key: `meeting-reminder-${recipient.dedupe}:${meeting.id}` });
     }
   }
-  const { data: rows } = await admin.from('email_outbox').select('id,user_id,client_id,project_id,email_type,recipient_email,template_data,attempts').in('status', ['pending', 'failed']).lte('available_at', new Date().toISOString()).lt('attempts', 5).order('created_at').limit(limit);
-  let sentEmails = 0; let failedEmails = 0;
+  const { data: rows } = await admin.from('email_outbox').select('id,user_id,client_id,project_id,email_type,recipient_email,template_data,attempts').neq('email_type', 'task.assigned').in('status', ['pending', 'failed']).lte('available_at', new Date().toISOString()).lt('attempts', 5).order('created_at').limit(limit);
+  const assignment = await deliverAssignmentEmails(undefined, limit);
+  let sentEmails = assignment.sentEmails; let failedEmails = assignment.failedEmails;
   for (const row of rows || []) {
     const { data: claimed } = await admin.from('email_outbox').update({ status: 'sending', attempts: row.attempts + 1, last_error: null }).eq('id', row.id).in('status', ['pending', 'failed']).select('id').maybeSingle();
     if (!claimed) continue;

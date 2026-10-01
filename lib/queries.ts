@@ -431,16 +431,16 @@ export async function getClientConversationThreads(): Promise<ConversationThread
 }
 
 export async function getClientTaskList(): Promise<ClientTaskSummary[]> {
-  if (isDemoMode()) return demoTasks.filter((task) => task.clientVisible && task.status !== 'draft').map((task) => ({ id: task.id, projectId: task.projectId, projectName: demoProjects.find((project) => project.id === task.projectId)?.projectName || 'Project', title: task.title, status: task.status, feedbackState: task.feedbackState, feedbackSubmittedAt: task.feedbackSubmittedAt }));
+  if (isDemoMode()) return demoTasks.filter((task) => task.clientVisible && task.status !== 'draft').map((task) => ({ id: task.id, projectId: task.projectId, projectName: demoProjects.find((project) => project.id === task.projectId)?.projectName || 'Project', title: task.title, status: task.status, requiresCompletion: task.requiresCompletion, feedbackState: task.feedbackState, feedbackSubmittedAt: task.feedbackSubmittedAt }));
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
   const viewer = await getViewer();
   if (!viewer || viewer.role !== 'client') return [];
-  const { data, error } = await supabase.from('project_tasks').select('id,project_id,title,status,feedback_state,feedback_submitted_at,project:projects(project_name),assignee:clients!inner()').eq('assignee.auth_user_id', viewer.id).neq('assignee.status', 'disabled').is('archived_at', null).eq('client_visible', true).neq('status', 'draft').order('created_at');
+  const { data, error } = await supabase.from('project_tasks').select('id,project_id,title,status,requires_completion,feedback_state,feedback_submitted_at,project:projects(project_name),assignee:clients!inner()').eq('assignee.auth_user_id', viewer.id).neq('assignee.status', 'disabled').is('archived_at', null).eq('client_visible', true).neq('status', 'draft').order('created_at');
   if (error) throw new Error('Unable to load your tasks.');
   return (data || []).map((row) => {
     const project = Array.isArray(row.project) ? row.project[0] : row.project;
-    return { id: row.id, projectId: row.project_id, projectName: project?.project_name || 'Project', title: row.title, status: row.status === 'completed' ? 'completed' : 'active', feedbackState: feedbackState(row.feedback_state, row.feedback_state !== 'not_configured'), feedbackSubmittedAt: row.feedback_submitted_at };
+    return { id: row.id, projectId: row.project_id, projectName: project?.project_name || 'Project', title: row.title, status: row.status === 'completed' ? 'completed' : 'active', requiresCompletion: row.requires_completion, feedbackState: feedbackState(row.feedback_state, row.feedback_state !== 'not_configured'), feedbackSubmittedAt: row.feedback_submitted_at };
   });
 }
 

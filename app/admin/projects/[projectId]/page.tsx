@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowRight, CalendarBlank, CheckSquare, ClockCounterClockwise, User } from '@phosphor-icons/react/dist/ssr';
+import { ArrowRight, CalendarBlank, CheckSquare, User } from '@phosphor-icons/react/dist/ssr';
+import { ProjectActivity } from '@/components/admin/project-activity';
 import { InviteButton } from '@/components/admin/invite-button';
 import { ProgressBar } from '@/components/progress-bar';
 import { StatusBadge } from '@/components/status-badge';
@@ -12,12 +13,11 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export default async function ProjectOverviewPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   const supabase = await createSupabaseServerClient();
-  const [projectResult, tasksResult, clientsResult, meetingsResult, activityResult, invitationsResult] = await Promise.allSettled([
+  const [projectResult, tasksResult, clientsResult, meetingsResult, invitationsResult] = await Promise.allSettled([
     getProject(projectId),
     getProjectTasks(projectId),
     getProjectClients(projectId),
     getUpcomingProjectMeetings(projectId),
-    supabase ? supabase.from('project_activity').select('id,body,created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(5) : Promise.resolve({ data: [] }),
     supabase ? supabase.from('email_deliveries').select('client_id,status,created_at').eq('project_id', projectId).eq('email_type', 'client_invitation').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
   ]);
   const project = projectResult.status === 'fulfilled' ? projectResult.value : null;
@@ -27,7 +27,6 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
 
   const primaryClient = clients[0];
   const meetings = meetingsResult.status === 'fulfilled' ? meetingsResult.value : [];
-  const activity = activityResult.status === 'fulfilled' ? activityResult.value.data || [] : [];
   const invitationRows = invitationsResult.status === 'fulfilled' ? invitationsResult.value.data || [] : [];
   const invitation = invitationRows.find((item) => item.client_id === (primaryClient?.id || project.clientId)) || null;
 
@@ -79,10 +78,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         {tasks.length ? <div>{tasks.slice(0, 4).map((task) => <Link prefetch={false} className="flex items-center justify-between gap-4 border-b border-line px-5 py-4 last:border-b-0 hover:bg-[#f8faf9]" key={task.id} href={`/admin/projects/${project.id}/tasks/${task.id}`}><div className="min-w-0"><p className="truncate text-sm font-semibold">{task.title}</p><p className="mt-1 text-xs text-muted">{task.assigneeName || 'Unassigned'}</p></div><StatusBadge status={task.status} /></Link>)}</div> : <p className="p-7 text-sm text-muted">No tasks have been added to this project.</p>}
       </section>
 
-      <section className="surface-flat p-5">
-        <div className="flex items-center gap-2"><ClockCounterClockwise size={17} className="text-muted" aria-hidden /><h3 className="section-title">Project activity</h3></div>
-        <div className="mt-4 space-y-4">{activity.map((item) => <div key={item.id} className="border-l-2 border-[#cfe0dc] pl-3"><p className="text-sm leading-5">{item.body}</p><p className="mt-1 text-xs text-muted">{formatDate(item.created_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p></div>)}{!activity.length && <p className="text-sm leading-6 text-muted">Project and meeting activity will appear here.</p>}</div>
-      </section>
+      <ProjectActivity projectId={project.id} />
     </div>
   </div>;
 }

@@ -133,3 +133,29 @@ it('makes a multi-page reconnect gap loadable without discarding retained earlie
  const partial=mergeGap(withGap,{messages:Array.from({length:50},(_,i)=>message(151+i)),hasMore:true});expect(partial.pages[0].gap?.before).toBe(message(151).createdAt);
  const connected=mergeGap(partial,{messages:Array.from({length:51},(_,i)=>message(100+i)),hasMore:true});expect(connected.pages[0].gap).toBeUndefined();expect(flattenMessages(connected)).toHaveLength(250);expect(flattenMessages(connected)[0].id).toBe(id(1));
 });
+it('refreshes the active task badge from the authorized list after Realtime hints',async()=>{
+ const {countTaskAttention}=await import('@/lib/task-attention');
+ let tasks=[{id:id(8),projectId:id(3),status:'active',requiresCompletion:true}];
+ const counts:number[]=[];
+ const observer=new QueryObserver(client,{queryKey:key('tasks'),queryFn:async()=>tasks,initialData:tasks});
+ const unsubscribe=observer.subscribe(result=>{if(result.data)counts.push(countTaskAttention(result.data as import('@/lib/types').ClientTaskSummary[]));});
+ await vi.advanceTimersByTimeAsync(1);
+ tasks=[...tasks,{id:id(9),projectId:id(3),status:'active',requiresCompletion:true}];
+ sync.event('project_tasks','INSERT',{id:id(9),project_id:id(3),status:'active',client_visible:true});
+ await vi.advanceTimersByTimeAsync(250);
+ expect(counts.at(-1)).toBe(2);
+ tasks=tasks.map(t=>t.id===id(9)?{...t,status:'completed'}:t);
+ sync.event('project_tasks','UPDATE',{id:id(9),project_id:id(3),status:'completed',client_visible:true});
+ await vi.advanceTimersByTimeAsync(250);
+ expect(counts.at(-1)).toBe(1);
+ unsubscribe();
+});
+it('targets the cached admin project timeline for task and project message changes',async()=>{
+ sync.stop();const admin={id:id(2),role:'admin' as const};sync=new RealtimeSync(client,admin);
+ const own=queryKeys.data(admin,'project-activity',id(3));const other=queryKeys.data(admin,'project-activity',id(4));
+ client.setQueryData(own,{pages:[]});client.setQueryData(other,{pages:[]});
+ sync.event('project_tasks','UPDATE',{id:id(8),project_id:id(3),status:'active'});
+ await vi.advanceTimersByTimeAsync(250);
+ expect(client.getQueryState(own)?.isInvalidated).toBe(true);
+ expect(client.getQueryState(other)?.isInvalidated).toBe(false);
+});

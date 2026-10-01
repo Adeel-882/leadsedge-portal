@@ -22,7 +22,7 @@ export async function readJson<T>(url: string, identity: CacheIdentity, signal?:
 }
 export type CacheMutation = 'project' | 'person' | 'template' | 'task' | 'meeting';
 export function affectedResources(mutation: CacheMutation) {
-  return { project: ['dashboard', 'projects', 'people', 'home', 'conversations'], person: ['people', 'dashboard', 'projects'], template: ['templates', 'template'], task: ['task', 'tasks', 'home', 'dashboard'], meeting: ['meetings', 'home', 'dashboard'] }[mutation];
+  return { project: ['dashboard', 'projects', 'people', 'home', 'conversations'], person: ['people', 'dashboard', 'projects'], template: ['templates', 'template'], task: ['task', 'tasks', 'home', 'dashboard', 'project-activity'], meeting: ['meetings', 'home', 'dashboard', 'project-activity'] }[mutation];
 }
 export async function invalidateMutation(client: QueryClient, identity: CacheIdentity, mutation: CacheMutation, id?: string) {
   const resources = affectedResources(mutation);

@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
+import { queueAssignmentEmails, deliverAssignmentEmails } from '@/lib/assignment-email';
 import { requireApiRole } from '@/lib/auth';
 import { isDemoMode } from '@/lib/env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -13,5 +14,7 @@ export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase!.rpc('import_template_tasks', { target_project_id: parsed.data.projectId, target_template_id: parsed.data.templateId, selected_template_task_ids: parsed.data.templateTaskIds, initial_task_status: parsed.data.initialStatus });
   if (error) return NextResponse.json({ error: 'Tasks could not be imported.' }, { status: 500 });
+  const queued = await queueAssignmentEmails(data || []);
+  after(() => deliverAssignmentEmails(queued).then(() => undefined));
   return NextResponse.json({ imported: data?.length || 0 }, { status: 201 });
 }

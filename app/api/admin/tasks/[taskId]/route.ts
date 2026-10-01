@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/auth';
 import { isDemoMode } from '@/lib/env';
 import { sanitizeTaskDescription } from '@/lib/queries';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { queueAssignmentEmails, deliverAssignmentEmails } from '@/lib/assignment-email';
 import { taskUpdateSchema } from '@/lib/validation';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ taskId: string }> }) {
@@ -14,7 +14,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ta
   if (isDemoMode()) return NextResponse.json({ ok: true });
   const { taskId } = await params;
   const supabase = await createSupabaseServerClient();
-  const { data: current, error: loadError } = await supabase!.from('project_tasks').select('project_id,status,assignee_id,title,feedback_state').eq('id', taskId).is('archived_at', null).single();
+  const { data: current, error: loadError } = await supabase!.from('project_tasks').select('project_id,status,assignee_id,title,feedback_state,client_visible,requires_completion').eq('id', taskId).is('archived_at', null).single();
   if (loadError || !current) return NextResponse.json({ error: 'Task not found.' }, { status: 404 });
   if (parsed.data.assigneeId) {
     const { data: membership } = await supabase!.from('project_clients').select('client_id').eq('project_id', current.project_id).eq('client_id', parsed.data.assigneeId).maybeSingle();
@@ -35,12 +35,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ta
     if (parsed.data.status === 'active' && parsed.data.assigneeId) {
       const { data: client } = await supabase!.from('clients').select('auth_user_id,email,full_name').eq('id', parsed.data.assigneeId).single();
       if (client?.auth_user_id) await supabase!.from('notifications').insert({ user_id: client.auth_user_id, project_id: current.project_id, task_id: taskId, type: 'task.activated', title: 'New task ready', body: `${parsed.data.title} is ready for you.`, target_url: `/portal/tasks/${taskId}` });
-      if (client?.email) await createSupabaseAdminClient()!.from('email_outbox').insert({ user_id: client.auth_user_id, client_id: parsed.data.assigneeId, project_id: current.project_id, task_id: taskId, email_type: 'task.assigned', recipient_email: client.email, template_data: { clientName: client.full_name, taskTitle: parsed.data.title, targetUrl: `/portal/tasks/${taskId}` }, dedupe_key: `task-assigned:${taskId}` });
-  // Durable automation work (notifications, email_outbox rows) is committed by
-  // the statements above. Draining the outbox is the cron processor's job at
-  // /api/cron/automation; doing it inline made the user wait on Supabase round
-  // trips and Resend delivery before this response returned.
     }
   }
+  const newlyAvailable = parsed.data.status === 'active' && parsed.data.clientVisible && parsed.data.requiresCompletion && (current.status !== 'active' || !current.client_visible || !current.requires_completion || current.assignee_id !== parsed.data.assigneeId);
+  const queued = newlyAvailable ? await queueAssignmentEmails([taskId]) : [];
+  after(() => deliverAssignmentEmails(queued).then(() => undefined));
   return NextResponse.json({ ok: true });
 }

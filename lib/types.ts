@@ -100,7 +100,7 @@ export type TaskRecord = {
   feedbackSubmittedAt: string | null;
 };
 
-export type ClientTaskSummary = Pick<TaskRecord, 'id' | 'projectId' | 'title' | 'status' | 'feedbackState' | 'feedbackSubmittedAt'> & {
+export type ClientTaskSummary = Pick<TaskRecord, 'id' | 'projectId' | 'title' | 'status' | 'feedbackState' | 'feedbackSubmittedAt' | 'requiresCompletion'> & {
   projectName: string;
 };
 
