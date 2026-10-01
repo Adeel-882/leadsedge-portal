@@ -265,7 +265,16 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; accent-
   .modal-card { padding: 28px; }
   .drawer { padding: 28px 32px; }
   .toast { right: 24px; bottom: 24px; }
-  .messages-workspace { display: grid; height: min(760px, calc(100dvh - 175px)); min-height: 540px; grid-template-columns: minmax(260px, 310px) minmax(0, 1fr); }
+  .messages-workspace { display: grid; height: min(760px, calc(100dvh - 175px)); min-height: 0; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(260px, 310px) minmax(0, 1fr); }
+  /* A bounded grid row must shrink independently of either column's content. */
+  .messages-rail, .messages-pane { min-height: 0; }
+  .messages-rail-header, .messages-search, .messages-pane-header { flex-shrink: 0; }
+  .messages-pane-body .message-list { min-height: 0; }
+  .messages-pane-body .message-composer { flex-shrink: 0; }
+  /* Account for the real heading/padding through flex layout, not a guessed offset. */
+  .page-wrap.messages-page { display: flex; flex-direction: column; height: calc(100dvh - var(--topbar-height) - 64px - env(safe-area-inset-bottom)); min-height: 0; padding-bottom: 16px; }
+  .messages-page-heading { flex-shrink: 0; }
+  .messages-page > .messages-workspace { flex: 1; height: auto; min-height: 0; }
   .messages-rail, .mobile-conversation-open .messages-rail { display: flex; border-right: 1px solid var(--line); }
   .messages-pane, .mobile-conversation-open .messages-pane { display: flex; }
   .messages-mobile-back { display: none; }
@@ -276,6 +285,7 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; accent-
   .topbar-context { display: block; }
   .page-wrap { padding: 30px 30px 64px; }
   .admin-content { padding-left: var(--sidebar-width); }
+  .page-wrap.messages-page { height: calc(100dvh - var(--topbar-height)); }
   .metric-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .metric-strip-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .metric-item, .metric-item:nth-child(2n) { border-right: 1px solid var(--line); border-bottom: 0; }
