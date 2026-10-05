@@ -2,11 +2,12 @@ import type { Metadata } from 'next';
 import { Geist } from 'next/font/google';
 import './globals.css';
 import { themeBootstrap } from '@/lib/theme';
+import { configuredAppOrigin } from '@/lib/app-origin';
 
 const geist = Geist({ variable: '--font-geist', subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
+  metadataBase: new URL(configuredAppOrigin()),
   title: 'Leadsedge Portal',
   icons: {
     icon: [{ url: '/favicon.svg?v=leadsedge-red-1', type: 'image/svg+xml', sizes: 'any' }],

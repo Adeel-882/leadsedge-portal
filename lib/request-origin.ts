@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { configuredAppOrigin } from './app-origin';
 
 /**
  * The origin a browser actually addressed, derived from the request itself.
@@ -44,7 +45,7 @@ export function resolveRequestOrigin(request: NextRequest): string | null {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (configured) {
     try {
-      const configuredUrl = new URL(configured);
+      const configuredUrl = new URL(configuredAppOrigin(configured));
       if (configuredUrl.host === host) return configuredUrl.origin;
     } catch {
       // A malformed NEXT_PUBLIC_APP_URL must not break origin resolution.

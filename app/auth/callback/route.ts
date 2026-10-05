@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classifyOtpError, destinationForRole, isSupabaseAuthorizationCode, safeInternalPath, type AuthErrorReason } from '@/lib/auth-flow';
 import { completeAuthenticatedSession } from '@/lib/auth-session';
 import { createResponseBoundSupabaseClient } from '@/lib/supabase/response-bound';
+import { externalRequestUrl } from '@/lib/app-origin';
 
 /**
  * Compatibility entry point for PKCE links that were emailed while
@@ -22,7 +23,7 @@ function logCallback(stage: string, detail: Record<string, unknown>) {
 }
 
 export async function GET(request: NextRequest) {
-  const url = new URL(request.url);
+  const url = externalRequestUrl(request);
   const requestedNext = safeInternalPath(url.searchParams.get('next'), '') || null;
 
   const providerErrorCode = url.searchParams.get('error_code');

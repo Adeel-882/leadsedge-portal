@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   hasSupabaseEnv: vi.fn(() => true),
@@ -101,6 +101,45 @@ function query(table: string) {
 }
 
 describe('scanner-resistant TokenHash confirmation', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([
+    ['client', 'token_hash', '/portal'],
+    ['admin', 'token_hash', '/admin'],
+    ['client', 'code', '/portal'],
+    ['admin', 'code', '/admin'],
+  ] as const)('redirects proxied %s %s confirmation with HTTPS and GET', async (role, kind, destination) => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://portal.leadsedge.us');
+    mocks.profileRole = role;
+    const internal = 'http://portal.leadsedge.us/auth/confirm';
+    const headers = { Host: 'portal.leadsedge.us', 'X-Forwarded-Proto': 'https' };
+    const search = kind === 'code' ? `code=${authorizationCode}` : `token_hash=${tokenHash}&type=magiclink`;
+    const page = await GET(new NextRequest(`${internal}?${search}`, { headers }));
+    const html = await page.text();
+    expect(html).toContain('action="/auth/confirm"');
+    expect(page.headers.get('set-cookie')).toContain('Secure');
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    expect(mocks.exchangeCodeForSession).not.toHaveBeenCalled();
+    const cookie = page.headers.get('set-cookie')!.match(/leadsedge_auth_confirmation=([^;]+)/)![1];
+    const nonce = html.match(/name="confirmation_nonce" value="([^"]+)"/)![1];
+    const submit = (origin: string) => POST(new NextRequest(internal, {
+      method: 'POST',
+      headers: { ...headers, Origin: origin, 'Sec-Fetch-Site': 'same-origin',
+        'Content-Type': 'application/x-www-form-urlencoded', Cookie: `leadsedge_auth_confirmation=${cookie}` },
+      body: new URLSearchParams({ confirmation_nonce: nonce }),
+    }));
+    const rejected = await submit('https://evil.example');
+    expect(rejected.status).toBe(303);
+    expect(rejected.headers.get('location')).toBe('https://portal.leadsedge.us/auth/error?reason=invalid');
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    expect(mocks.exchangeCodeForSession).not.toHaveBeenCalled();
+    const response = await submit('https://portal.leadsedge.us');
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe(`https://portal.leadsedge.us${destination}`);
+    expect(response.headers.get('set-cookie')).toContain('sdk-generated-session-fixture=');
+    expect(kind === 'code' ? mocks.exchangeCodeForSession : mocks.verifyOtp).toHaveBeenCalledTimes(1);
+    expect(kind === 'code' ? mocks.verifyOtp : mocks.exchangeCodeForSession).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.hasSupabaseEnv.mockReturnValue(true);
@@ -215,7 +254,7 @@ describe('scanner-resistant TokenHash confirmation', () => {
 
     expect(mocks.verifyOtp).toHaveBeenCalledTimes(1);
     expect(mocks.verifyOtp).toHaveBeenCalledWith({ token_hash: tokenHash, type: 'email' });
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(303);
     expect(new URL(response.headers.get('location')!).pathname).toBe('/portal');
     expect(response.headers.get('set-cookie')).toContain('sdk-generated-session-fixture=session-fixture');
     expect(response.headers.get('set-cookie')).toContain('leadsedge_auth_confirmation=');
@@ -380,7 +419,7 @@ describe('scanner-resistant TokenHash confirmation', () => {
   ])('rejects a %s', async (_label, token) => {
     const response = await GET(confirmationRequest({ token }));
 
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(303);
     expect(new URL(response.headers.get('location')!).pathname).toBe('/auth/error');
     expect(new URL(response.headers.get('location')!).searchParams.get('reason')).toBe('invalid');
     expect(mocks.verifyOtp).not.toHaveBeenCalled();

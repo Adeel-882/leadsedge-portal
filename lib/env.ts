@@ -1,3 +1,5 @@
+import { configuredAppOrigin } from './app-origin';
+
 function hasValue(value: string | undefined) {
   return Boolean(value?.trim());
 }
@@ -63,5 +65,5 @@ export function getServerEnvironmentStatus() {
 }
 
 export function appUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  return configuredAppOrigin();
 }

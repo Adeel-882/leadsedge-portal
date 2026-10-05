@@ -3,6 +3,7 @@ import { classifyOtpError, describeCredential, destinationForRole, isSupabaseAut
 import { completeAuthenticatedSession } from '@/lib/auth-session';
 import { resolveRequestOrigin } from '@/lib/request-origin';
 import { createResponseBoundSupabaseClient } from '@/lib/supabase/response-bound';
+import { externalRequestUrl } from '@/lib/app-origin';
 
 const confirmationCookie = 'leadsedge_auth_confirmation';
 const confirmationLifetimeSeconds = 10 * 60;
@@ -30,7 +31,7 @@ type PendingConfirmation = {
 };
 
 function errorRedirect(url: URL, reason: AuthErrorReason) {
-  const response = NextResponse.redirect(new URL(`/auth/error?reason=${reason}`, url.origin));
+  const response = NextResponse.redirect(new URL(`/auth/error?reason=${reason}`, url.origin), 303);
   return secureResponse(response);
 }
 
@@ -247,7 +248,7 @@ function isSameOriginPost(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const url = new URL(request.url);
+  const url = externalRequestUrl(request);
   const next = normalizeConfirmationNext(url.searchParams.get('next'), url);
 
   // Supabase reports a failed verification on the redirect target itself rather
@@ -317,7 +318,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const url = new URL(request.url);
+  const url = externalRequestUrl(request);
   if (!isSameOriginPost(request)) {
     logConfirmation('POST_ORIGIN_REJECTED', { originMatches: false, ...describeOrigin(request) });
     return clearConfirmationCookie(errorRedirect(url, 'invalid'), url);
@@ -365,6 +366,6 @@ export async function POST(request: NextRequest) {
     return clearConfirmationCookie(attachCookies(errorRedirect(url, completion.reason)), url);
   }
 
-  const response = attachCookies(secureResponse(NextResponse.redirect(new URL(destinationForRole(completion.role, state.next), url.origin))));
+  const response = attachCookies(secureResponse(NextResponse.redirect(new URL(destinationForRole(completion.role, state.next), url.origin), 303)));
   return clearConfirmationCookie(response, url);
 }
