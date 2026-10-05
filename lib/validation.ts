@@ -49,7 +49,12 @@ export const profileSchema = z.object({
   timezone: z.string().trim().min(1).max(80),
   notificationPreferences: z.object({ task_messages: z.boolean(), project_messages: z.boolean(), task_completed: z.boolean() }).optional(),
 });
-export const formSubmissionSchema = z.object({ answers: z.record(z.string(), z.union([z.string(), z.array(z.string())])) });
+export const formSubmissionSchema = z.object({
+  answers: z.record(z.string().min(1).max(80), z.union([
+    z.string().max(10000),
+    z.array(z.string().max(10000)).max(20),
+  ])).refine((answers) => Object.keys(answers).length <= 30),
+});
 
 export const availabilitySchema = z.object({
   timezone: z.string().trim().min(1).max(80),

@@ -37,7 +37,7 @@ export const getAuthorizedClientTask = cache(async (viewerId: string, taskId: st
   if (!supabase) return null;
   const { data: task, error } = await supabase
     .from('project_tasks')
-    .select('id,project_id,assignee_id,client_visible,status,assignee:clients!inner(auth_user_id,status)')
+    .select('id,project_id,assignee_id,client_visible,status,form_schema,assignee:clients!inner(auth_user_id,status)')
     .eq('id', taskId)
     .eq('assignee.auth_user_id', viewerId)
     .neq('assignee.status', 'disabled')
@@ -50,7 +50,7 @@ export const getAuthorizedClientTask = cache(async (viewerId: string, taskId: st
   // enabled client, direct task assignment, and project membership. Repeating
   // getAuthorizedClientProject() here added a fully serial remote read without
   // strengthening the authorization decision.
-  return { id: task.id, projectId: task.project_id, assigneeId: task.assignee_id, status: task.status };
+  return { id: task.id, projectId: task.project_id, assigneeId: task.assignee_id, status: task.status, formSchema: task.form_schema as import('./types').FormField[] | null };
 });
 
 export const getAuthorizedClientMeeting = cache(async (viewerId: string, meetingId: string) => {
