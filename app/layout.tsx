@@ -8,6 +8,10 @@ const geist = Geist({ variable: '--font-geist', subsets: ['latin'] });
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
   title: 'Leadsedge Portal',
+  icons: {
+    icon: [{ url: '/favicon.svg?v=leadsedge-red-1', type: 'image/svg+xml', sizes: 'any' }],
+    shortcut: '/favicon.svg?v=leadsedge-red-1',
+  },
   description: 'A focused client delivery portal for lead assignment, feedback, and conversation.',
   openGraph: {
     title: 'Leadsedge Portal',
