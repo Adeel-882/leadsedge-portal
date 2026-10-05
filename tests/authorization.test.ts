@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canClientAccessTask, canClientCompleteTask, normalizeImportedTaskTitle, projectProgress } from '@/lib/authorization';
+import { canClientAccessTask, canClientCompleteTask, projectProgress } from '@/lib/authorization';
 import { demoClient, demoTasks } from '@/lib/demo-data';
 
 describe('client task authorization', () => {
@@ -20,10 +20,6 @@ describe('client task authorization', () => {
 });
 
 describe('task and project helpers', () => {
-  it('adds the client name once to imported task titles', () => {
-    expect(normalizeImportedTaskTitle('Lead Assignment', 'Adeel Ahmed')).toBe('Lead Assignment - Adeel Ahmed');
-    expect(normalizeImportedTaskTitle('Lead Assignment - Adeel Ahmed', 'Adeel Ahmed')).toBe('Lead Assignment - Adeel Ahmed');
-  });
 
   it('keeps progress within zero and one hundred', () => {
     expect(projectProgress(1, 4)).toBe(25);

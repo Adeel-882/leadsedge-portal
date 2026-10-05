@@ -1,5 +1,19 @@
 import type { AdminConversationSummary, ConversationThread, MessageWorkspaceThread, ProjectSummary } from './types';
 
+export function filterProjectChatOptions(projects: ProjectSummary[], query: string) {
+  const search = query.trim().toLowerCase();
+  return projects.filter(project => project.status === 'active' &&
+    (!search || [project.clientName, project.projectName].some(value => value.toLowerCase().includes(search))));
+}
+
+// This UI guard complements the server's session and RLS checks.
+export function projectChatSelection(role: 'admin' | 'client', projects: ProjectSummary[], threads: MessageWorkspaceThread[], projectId: string) {
+  if (role !== 'admin') return null;
+  const project = projects.find(item => item.id === projectId && item.status === 'active');
+  if (!project) return null;
+  return threads.find(item => item.key === messageThreadKey('project', projectId) && item.kind === 'project') || emptyAdminProjectThread(project);
+}
+
 export function messageThreadKey(kind: 'project' | 'task', resourceId: string) {
   return `${kind}:${resourceId}`;
 }

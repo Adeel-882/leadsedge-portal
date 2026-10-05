@@ -10,7 +10,7 @@ import { ArrowLeft, ArrowSquareOut, MagnifyingGlass, Plus, X } from '@phosphor-i
 import { Conversation } from '@/components/conversation';
 import { EmptyState } from '@/components/empty-state';
 import { formatTime, initials } from '@/lib/format';
-import { emptyAdminProjectThread, resolveMessageThread } from '@/lib/message-workspace';
+import { filterProjectChatOptions, projectChatSelection, resolveMessageThread } from '@/lib/message-workspace';
 import type { ConversationMessage, MessageWorkspaceThread, ProjectSummary } from '@/lib/types';
 
 type MessagesWorkspaceProps = {
@@ -69,6 +69,8 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
   const [loadError, setLoadError] = useState('');
   const [mobileConversation, setMobileConversation] = useState(initialMobileConversation);
   const [projectPicker, setProjectPicker] = useState(false);
+  const [projectQuery, setProjectQuery] = useState('');
+  const matchingProjects = useMemo(() => filterProjectChatOptions(projects, projectQuery), [projects, projectQuery]);
   const [desktop, setDesktop] = useState(false);
 
   const selected = threads.find((thread) => thread.key === selectedKey) || resolveMessageThread(threads, null);
@@ -106,12 +108,10 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
   }, [selectThread, threads]);
 
   function openProject(project: ProjectSummary) {
-    const key = `project:${project.id}`;
-    let thread = threads.find((item) => item.key === key);
-    if (!thread) {
-      thread = emptyAdminProjectThread(project);
-      setThreads((current) => [...current, thread!]);
-    }
+    const thread = projectChatSelection(role, projects, threads, project.id);
+    if (!thread) return;
+    setThreads((current) => current.some(item => item.key === thread.key) ? current : [...current, thread]);
+    setQuery('');
     setProjectPicker(false);
     void selectThread(thread);
   }
@@ -138,7 +138,7 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
           <p className="text-sm font-bold">Conversations</p>
           <p className="text-xs text-muted">{threads.length} {threads.length === 1 ? 'thread' : 'threads'}</p>
         </div>
-        {role === 'admin' && <button type="button" className="icon-button" aria-label="Start or open project chat" onClick={() => setProjectPicker(true)}><Plus size={18} weight="bold" aria-hidden /></button>}
+        {role === 'admin' && <button type="button" className="icon-button" aria-label="Start or open project chat" onClick={() => { setProjectQuery(''); setProjectPicker(true); }}><Plus size={18} weight="bold" aria-hidden /></button>}
       </header>
       <label className="messages-search">
         <MagnifyingGlass size={16} aria-hidden />
@@ -168,6 +168,6 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
       </> : <div className="messages-pane-empty"><EmptyState title="No message conversations yet" body={role === 'admin' ? 'Start a project chat to open the first conversation.' : 'Your project conversations will appear here.'} /></div>}
     </section>
 
-    {projectPicker && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="project-chat-title"><div className="modal-card"><div className="flex items-start justify-between"><div><p className="page-eyebrow">Start or open</p><h2 id="project-chat-title" className="text-2xl font-bold">Project chat</h2><p className="mt-2 text-sm leading-6 text-muted">Choose an active project. Its conversation opens in the Messages workspace.</p></div><button className="icon-button" aria-label="Close" onClick={() => setProjectPicker(false)}><X size={19} aria-hidden /></button></div><div className="mt-6 max-h-80 overflow-y-auto border-y border-line">{projects.map((project) => <button type="button" key={project.id} onClick={() => openProject(project)} className="messages-project-option"><span className="avatar h-9 w-9 bg-[#e6f1ef] text-teal">{initials(project.clientName)}</span><span className="min-w-0 text-left"><b className="block truncate text-sm">{project.projectName}</b><small className="text-muted">{project.clientName}</small></span></button>)}</div><div className="mt-6 flex justify-end"><button className="button-secondary" onClick={() => setProjectPicker(false)}>Close</button></div></div></div>}
+    {role === 'admin' && projectPicker && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="project-chat-title"><div className="modal-card"><div className="flex items-start justify-between"><div><p className="page-eyebrow">Start or open</p><h2 id="project-chat-title" className="text-2xl font-bold">Project chat</h2><p className="mt-2 text-sm leading-6 text-muted">Choose an active project. Its conversation opens in the Messages workspace.</p></div><button className="icon-button" aria-label="Close" onClick={() => setProjectPicker(false)}><X size={19} aria-hidden /></button></div><label className="messages-search mt-4"><MagnifyingGlass size={16} aria-hidden /><span className="sr-only">Search client or project</span><input autoFocus value={projectQuery} onChange={event => setProjectQuery(event.target.value)} placeholder="Search client or project" /></label><div className="mt-4 max-h-80 overflow-y-auto border-y border-line">{matchingProjects.map((project) => <button type="button" key={project.id} onClick={() => openProject(project)} className="messages-project-option"><span className="avatar h-9 w-9 bg-[#e6f1ef] text-teal">{initials(project.clientName)}</span><span className="min-w-0 text-left"><b className="block truncate text-sm">{project.clientName}</b><small className="text-muted">Project: {project.projectName}</small></span><span className="ml-auto text-xs text-teal">Open chat</span></button>)}{!matchingProjects.length && <p className="p-4 text-sm text-muted">{projects.length ? 'No clients or projects match your search.' : 'No active projects available.'}</p>}</div><div className="mt-6 flex justify-end"><button className="button-secondary" onClick={() => setProjectPicker(false)}>Close</button></div></div></div>}
   </div>;
 }
