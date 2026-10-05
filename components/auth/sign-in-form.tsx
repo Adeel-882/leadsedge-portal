@@ -43,8 +43,8 @@ export function SignInForm({ nextPath }: { nextPath: string }) {
 
   return <form onSubmit={submit} className="mt-8 space-y-5">
     <label><span className="field-label">Email address</span><input className="field-input" type="email" name="email" autoComplete="email" inputMode="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
-    {requestState.status === 'success' && <div role="status" aria-live="polite" className="rounded-lg bg-[#edf5f3] p-4 text-[#0f5a52]"><p className="text-sm font-bold">Check your email</p><p className="mt-1 text-sm">If this email is authorized, check your inbox for a sign-in link.</p></div>}
-    {requestState.status === 'error' && <p role="alert" aria-live="assertive" className="rounded-lg bg-[#faeeee] p-3 text-sm text-[#8f3030]">{requestState.message}</p>}
+    {requestState.status === 'success' && <div role="status" aria-live="polite" className="rounded-lg bg-success-soft p-4 text-success"><p className="text-sm font-bold">Check your email</p><p className="mt-1 text-sm">If this email is authorized, check your inbox for a sign-in link.</p></div>}
+    {requestState.status === 'error' && <p role="alert" aria-live="assertive" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{requestState.message}</p>}
     <button type="submit" className="button-primary w-full" disabled={loading}>{loading ? 'Sending link...' : 'Email me a secure sign-in link'}</button>
   </form>;
 }

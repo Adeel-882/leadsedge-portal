@@ -30,6 +30,6 @@ export function RealtimeProvider({ identity, children }: { identity: CacheIdenti
       window.removeEventListener('pagehide', stop);
     };
   }, [sync]);
-  return <RealtimeContext.Provider value={sync}><span hidden data-realtime-status={status} data-realtime-channel-count={sync.getChannelCount()}/>{status === 'degraded' && <div role="status" className="bg-amber-50 px-4 py-2 text-sm">Live updates interrupted. Reconnecting… <button onClick={() => { const supabase=createSupabaseBrowserClient(); if(supabase) void sync.start(supabase); sync.reconcile(); }}>Refresh current data</button></div>}{children}</RealtimeContext.Provider>;
+  return <RealtimeContext.Provider value={sync}><span hidden data-realtime-status={status} data-realtime-channel-count={sync.getChannelCount()}/>{status === 'degraded' && <div role="status" className="bg-warning-soft px-4 py-2 text-sm">Live updates interrupted. Reconnecting… <button onClick={() => { const supabase=createSupabaseBrowserClient(); if(supabase) void sync.start(supabase); sync.reconcile(); }}>Refresh current data</button></div>}{children}</RealtimeContext.Provider>;
 }
 export function useRealtimeSync() { const sync=useContext(RealtimeContext); if(!sync) throw new Error('Authenticated realtime provider required.'); return sync; }

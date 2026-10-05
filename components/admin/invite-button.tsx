@@ -15,7 +15,7 @@ export async function resendProjectInvitation(projectId: string) {
 
 export function InvitationToast({ toast }: { toast: InvitationToastState | null }) {
   if (!toast) return null;
-  return <div role={toast.tone === 'error' ? 'alert' : 'status'} aria-live="polite" className={`toast ${toast.tone === 'error' ? 'bg-[#8f3030]' : ''}`}>{toast.message}</div>;
+  return <div role={toast.tone === 'error' ? 'alert' : 'status'} aria-live="polite" className={`toast ${toast.tone === 'error' ? 'bg-danger-fill text-white' : ''}`}>{toast.message}</div>;
 }
 
 export function InviteButton({ projectId }: { projectId: string }) {
@@ -43,5 +43,5 @@ export function InviteButton({ projectId }: { projectId: string }) {
     }
   }
 
-  return <div><button className="button-secondary mt-4 w-full" disabled={sending} onClick={resend}><PaperPlaneTilt size={15} aria-hidden />{sending ? 'Sending...' : 'Resend invitation'}</button>{message && <p aria-live="polite" className={`mt-2 text-xs ${toast?.tone === 'error' ? 'text-[#a34343]' : 'text-muted'}`}>{message}</p>}<InvitationToast toast={toast} /></div>;
+  return <div><button className="button-secondary mt-4 w-full" disabled={sending} onClick={resend}><PaperPlaneTilt size={15} aria-hidden />{sending ? 'Sending...' : 'Resend invitation'}</button>{message && <p aria-live="polite" className={`mt-2 text-xs ${toast?.tone === 'error' ? 'text-danger' : 'text-muted'}`}>{message}</p>}<InvitationToast toast={toast} /></div>;
 }

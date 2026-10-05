@@ -12,13 +12,13 @@ export default async function SetupPage() {
 
   let content: React.ReactNode;
   if (environment.demoMode) {
-    content = <div className="mt-7 rounded-xl bg-[#fff4df] p-4 text-sm text-[#805c18]">Demo mode is enabled. Disable it and connect Supabase before administrator setup.</div>;
+    content = <div className="mt-7 rounded-xl bg-warning-soft p-4 text-sm text-warning">Demo mode is enabled. Disable it and connect Supabase before administrator setup.</div>;
   } else if (!environment.supabaseConfigured) {
-    content = <div className="mt-7 rounded-xl bg-[#fff0f0] p-4 text-sm text-[#9c3434]">Supabase server configuration is incomplete. Add the missing environment variables and restart the application.</div>;
+    content = <div className="mt-7 rounded-xl bg-danger-soft p-4 text-sm text-danger">Supabase server configuration is incomplete. Add the missing environment variables and restart the application.</div>;
   } else if (adminExists === null) {
-    content = <div className="mt-7 rounded-xl bg-[#fff0f0] p-4 text-sm text-[#9c3434]">The application could not verify administrator setup. Check the Supabase connection and try again.</div>;
+    content = <div className="mt-7 rounded-xl bg-danger-soft p-4 text-sm text-danger">The application could not verify administrator setup. Check the Supabase connection and try again.</div>;
   } else if (adminExists) {
-    content = <div className="mt-7 space-y-4"><div className="rounded-xl bg-[#eef7f5] p-4 text-sm text-[#116b63]">Administrator setup is already complete. This one-time route is now locked.</div><Link href={viewer?.role === 'admin' ? '/admin' : '/auth/sign-in?next=/admin'} className="button-primary w-full">{viewer?.role === 'admin' ? 'Open admin dashboard' : 'Sign in as administrator'}</Link></div>;
+    content = <div className="mt-7 space-y-4"><div className="rounded-xl bg-success-soft p-4 text-sm text-success">Administrator setup is already complete. This one-time route is now locked.</div><Link href={viewer?.role === 'admin' ? '/admin' : '/auth/sign-in?next=/admin'} className="button-primary w-full">{viewer?.role === 'admin' ? 'Open admin dashboard' : 'Sign in as administrator'}</Link></div>;
   } else if (viewer) {
     content = <SetupAdminForm initialName={viewer.fullName} />;
   } else {

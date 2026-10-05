@@ -149,18 +149,18 @@ function confirmationPage(nonce: string) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Secure sign-in | Leadsedge</title>
   <style>
-    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172521; background: #f3f6f5; }
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #171717; background: #f7f7f5; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: linear-gradient(135deg, #f7faf9 0%, #edf4f2 100%); }
-    main { width: min(100%, 460px); border: 1px solid #dce5e2; border-radius: 18px; background: #fff; padding: 38px; box-shadow: 0 24px 70px rgba(27, 55, 47, .09); }
-    .brand { color: #087c70; font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
-    .eyebrow { margin: 42px 0 10px; color: #087c70; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: linear-gradient(135deg, #f7f7f5 0%, #f3f3f1 100%); }
+    main { width: min(100%, 460px); border: 1px solid #e5e5e1; border-radius: 18px; background: #fff; padding: 38px; box-shadow: 0 24px 70px rgba(0, 0, 0, .09); }
+    .brand { color: #bd291f; font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+    .eyebrow { margin: 42px 0 10px; color: #bd291f; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
     h1 { margin: 0; font-size: 34px; letter-spacing: -.04em; line-height: 1.08; }
-    p { margin: 14px 0 0; color: #60706b; font-size: 15px; line-height: 1.65; }
+    p { margin: 14px 0 0; color: #666662; font-size: 15px; line-height: 1.65; }
     form { margin-top: 30px; }
-    button { width: 100%; min-height: 46px; border: 1px solid #087c70; border-radius: 10px; background: #087c70; color: #fff; cursor: pointer; font: inherit; font-size: 14px; font-weight: 750; }
-    button:hover { background: #06685f; border-color: #06685f; }
-    button:focus-visible { outline: 3px solid rgba(8, 124, 112, .24); outline-offset: 3px; }
+    button { width: 100%; min-height: 46px; border: 1px solid #ff4134; border-radius: 10px; background: #ff4134; color: #171717; cursor: pointer; font: inherit; font-size: 14px; font-weight: 750; }
+    button:hover { background: #f03b2e; border-color: #f03b2e; }
+    button:focus-visible { outline: 3px solid #bd291f; outline-offset: 3px; }
     .note { margin-top: 18px; font-size: 12px; line-height: 1.6; }
   </style>
 </head>

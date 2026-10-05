@@ -1,5 +1,7 @@
 'use client';
 
+import { ThemeToggle } from '@/components/theme-toggle';
+
 import { CacheLink as Link } from '@/components/cache-link';
 import { usePathname } from 'next/navigation';
 import { Bell, CalendarDots, CaretRight, ChatsCircle, GearSix, SquaresFour, Stack, UsersThree } from '@phosphor-icons/react';
@@ -34,7 +36,7 @@ export function AdminShell({ children, displayName, viewerId, messageUnreadCount
       </div>
     </aside>
     <div className="admin-content">
-      <header className="topbar"><div className="lg:hidden"><Brand href="/admin" /></div><div className="topbar-context"><p className="text-[11px] text-muted">Admin workspace</p><p className="text-[13px] font-semibold">Leadsedge Portal</p></div><div className="topbar-actions"><Link prefetch={false} href="/admin/notifications" aria-label={`Notifications${unread.notifications ? ` (${unread.notifications} unread)` : ''}`} className="notification-button"><Bell size={19} weight="regular" aria-hidden />{unread.notifications > 0 && <span>{unread.notifications}</span>}</Link><Link prefetch={false} href="/admin/settings" aria-label="Administrator settings" className="avatar avatar-navy">{initials(displayName)}</Link></div></header>
+      <header className="topbar"><div className="lg:hidden"><Brand href="/admin" /></div><div className="topbar-context"><p className="text-[11px] text-muted">Admin workspace</p><p className="text-[13px] font-semibold">Leadsedge Portal</p></div><div className="topbar-actions"><ThemeToggle /><Link prefetch={false} href="/admin/notifications" aria-label={`Notifications${unread.notifications ? ` (${unread.notifications} unread)` : ''}`} className="notification-button"><Bell size={19} weight="regular" aria-hidden />{unread.notifications > 0 && <span>{unread.notifications}</span>}</Link><Link prefetch={false} href="/admin/settings" aria-label="Administrator settings" className="avatar avatar-navy">{initials(displayName)}</Link></div></header>
       {children}
       <nav className="mobile-admin-nav" aria-label="Admin navigation">{items.map((item) => { const active = item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href); return <Link prefetch={false} key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={active ? 'active' : ''}><item.Icon size={20} weight={active ? 'fill' : 'regular'} aria-hidden />{item.label === 'Messages' && unread.messages > 0 && <span className="mobile-nav-badge">{unread.messages}</span>}<small>{item.label}</small></Link>; })}</nav>
     </div>

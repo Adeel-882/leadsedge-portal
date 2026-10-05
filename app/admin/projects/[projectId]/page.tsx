@@ -52,7 +52,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
           <div className="p-5">
             <div className="flex items-center gap-2 text-muted"><CalendarBlank size={16} aria-hidden /><p className="text-xs font-semibold">Upcoming meetings</p></div>
             <p className="mt-2 text-2xl font-bold tabular-nums">{meetings.length}</p>
-            {meetings[0] ? <Link prefetch={false} href={`/admin/meetings/${meetings[0].id}`} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-teal">{formatDate(meetings[0].startAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: meetings[0].timezone })}<ArrowRight size={12} aria-hidden /></Link> : <p className="mt-2 text-xs text-muted">No meetings scheduled</p>}
+            {meetings[0] ? <Link prefetch={false} href={`/admin/meetings/${meetings[0].id}`} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text">{formatDate(meetings[0].startAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: meetings[0].timezone })}<ArrowRight size={12} aria-hidden /></Link> : <p className="mt-2 text-xs text-muted">No meetings scheduled</p>}
           </div>
         </div>
       </section>
@@ -63,7 +63,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         <p className="mt-1 break-all text-sm text-muted">{primaryClient?.email || 'No email available'}</p>
         <div className="mt-4 border-t border-line pt-4">
           <p className="text-[11px] font-semibold text-muted">Invitation status:</p>
-          {invitation ? <p className={`mt-1 text-xs font-semibold ${invitation.status === 'sent' ? 'text-teal' : 'text-[#963d3d]'}`}>{invitation.status === 'sent' ? 'Sent' : 'Failed'} <span className="font-normal text-muted">on {formatDate(invitation.created_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span></p> : <p className="mt-1 text-xs text-muted">No delivery status available</p>}
+          {invitation ? <p className={`mt-1 text-xs font-semibold ${invitation.status === 'sent' ? 'text-success' : 'text-danger'}`}>{invitation.status === 'sent' ? 'Sent' : 'Failed'} <span className="font-normal text-muted">on {formatDate(invitation.created_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span></p> : <p className="mt-1 text-xs text-muted">No delivery status available</p>}
           {primaryClient && <InviteButton projectId={project.id} />}
         </div>
       </aside>
@@ -75,7 +75,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
           <div><h3 className="section-title">Next tasks</h3><p className="section-description">The next work items in this project.</p></div>
           <Link prefetch={false} href={`/admin/projects/${project.id}/tasks`} className="button-secondary">View tasks<ArrowRight size={14} aria-hidden /></Link>
         </div>
-        {tasks.length ? <div>{tasks.slice(0, 4).map((task) => <Link prefetch={false} className="flex items-center justify-between gap-4 border-b border-line px-5 py-4 last:border-b-0 hover:bg-[#f8faf9]" key={task.id} href={`/admin/projects/${project.id}/tasks/${task.id}`}><div className="min-w-0"><p className="truncate text-sm font-semibold">{task.title}</p><p className="mt-1 text-xs text-muted">{task.assigneeName || 'Unassigned'}</p></div><StatusBadge status={task.status} /></Link>)}</div> : <p className="p-7 text-sm text-muted">No tasks have been added to this project.</p>}
+        {tasks.length ? <div>{tasks.slice(0, 4).map((task) => <Link prefetch={false} className="flex items-center justify-between gap-4 border-b border-line px-5 py-4 last:border-b-0 hover:bg-brand-soft" key={task.id} href={`/admin/projects/${project.id}/tasks/${task.id}`}><div className="min-w-0"><p className="truncate text-sm font-semibold">{task.title}</p><p className="mt-1 text-xs text-muted">{task.assigneeName || 'Unassigned'}</p></div><StatusBadge status={task.status} /></Link>)}</div> : <p className="p-7 text-sm text-muted">No tasks have been added to this project.</p>}
       </section>
 
       <ProjectActivity projectId={project.id} />
