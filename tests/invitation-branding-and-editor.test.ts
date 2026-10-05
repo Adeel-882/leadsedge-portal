@@ -1,0 +1,17 @@
+import {beforeEach,it,expect,vi} from 'vitest';
+import {readFileSync} from 'node:fs';
+import {leadDetailsEditorValue} from '@/lib/lead-details-copy';
+const mock=vi.hoisted(()=>({send:vi.fn()}));
+vi.mock('resend',()=>({Resend:class {emails={send:mock.send}}}));
+import {sendPortalInvitation} from '@/lib/email';
+beforeEach(()=>{vi.clearAllMocks();vi.stubEnv('RESEND_API_KEY','test');vi.stubEnv('RESEND_FROM_EMAIL','Portal <portal@example.com>');mock.send.mockResolvedValue({data:{id:'synthetic'},error:null})});
+it('sends the requested dark invitation through the unchanged sender with escaped name and URL',async()=>{
+ const url='https://example.com/auth/confirm?token_hash=synthetic&type=invite&next=%2Fportal';
+ await sendPortalInvitation({to:'client@example.com',clientName:'Zack <Wilson> & Co',projectName:'Do not substitute project',actionLink:url});
+ const payload=mock.send.mock.calls[0][0];expect(mock.send).toHaveBeenCalledTimes(1);expect(payload.subject).toBe("You're invited to LeadsEdge Portal");expect(payload.from).toBe('Portal <portal@example.com>');expect(payload.to).toBe('client@example.com');
+ expect(payload.html).toContain('Zack &lt;Wilson&gt; &amp; Co');expect(payload.html).toContain(url.replaceAll('&','&amp;'));expect(payload.html).toContain('Welcome to LeadsEdge Portal');expect(payload.html).toContain('View Your Portal');expect(payload.html).toContain('background:#070707');expect(payload.html).toContain('background:#111111');expect(payload.html).toMatch(/<a\s+href=[\s\S]*?background:#FF4134/);expect(payload.html).toContain('align="center"');expect(payload.html).not.toContain('#0d7c72');expect(payload.html).not.toContain('Do not substitute project');expect(payload.html).not.toMatch(/\{\{(?:CLIENT_NAME|INVITE_URL)\}\}/);expect(payload.html).toContain('invitation link can only be used once');
+});
+it('keeps provider failures visible and does not send without configuration',async()=>{mock.send.mockResolvedValue({error:{message:'provider failed'}});expect(await sendPortalInvitation({to:'x@example.com',clientName:'X',projectName:'P',actionLink:'https://example.com'})).toEqual({ok:false,error:'provider failed'});vi.stubEnv('RESEND_API_KEY','');await sendPortalInvitation({to:'x@example.com',clientName:'X',projectName:'P',actionLink:'https://example.com'});expect(mock.send).toHaveBeenCalledTimes(1)});
+it('removes only stock helper copy while retaining the exact heading',()=>{expect(leadDetailsEditorValue('<h2>Lead details</h2><p>Add the lead information here before activating this task.</p>')).toBe('<h2>Lead details</h2>')});
+it('preserves custom lead information, including instructions embedded in real content',()=>{for(const value of ['<h2>Lead details</h2><p>Call Tuesday</p>','<h2>Lead details</h2><p>Add the lead information here before activating this task.</p><p>Custom details</p>',''])expect(leadDetailsEditorValue(value)).toBe(value)});
+it('keeps original description state and editable fields, activation and completion behavior',()=>{const source=readFileSync('components/admin/task-editor.tsx','utf8');expect(source).toContain('useState(task.description)');expect(source).toContain('value={leadDetailsEditorValue(description)} onChange={setDescription}');expect(source).toContain('field-label">Lead details');expect(source).toContain("await save('active')");expect(source).toContain('requiresCompletion');expect(source).toContain('JSON.stringify({ title, description,')});

@@ -15,11 +15,12 @@ it('invites the full client name to the product and preserves the secure URL', a
   await sendPortalInvitation({ to: 'zack@example.com', clientName: 'Zack Wilson', projectName: 'Zack', actionLink: link });
   const payload = mocks.send.mock.calls[0][0];
   expect(payload.to).toBe('zack@example.com');
-  expect(payload.subject).toBe('Your LeadsEdge Portal invitation');
-  expect(payload.html).toContain('Hi Zack Wilson, you’ve been invited to <strong>LeadsEdge Portal</strong>');
+  expect(payload.subject).toBe("You're invited to LeadsEdge Portal");
+  expect(payload.html).toContain('Hi Zack Wilson,');
+  expect(payload.html).toContain('Welcome to LeadsEdge Portal');
   expect(payload.html).not.toContain('<strong>Zack</strong>');
   expect(payload.html).toContain(link.replaceAll('&', '&amp;'));
-  expect(payload.html).toContain('This link is private and expires automatically.');
+  expect(payload.html).toContain('This invitation is private and expires automatically.');
 });
 it('passes the stable delivery key to the existing provider', async () => {
   await sendBrandedEmail({ to: 'x@example.com', subject: 'Assignment', heading: 'Lead', body: 'Details', actionLabel: 'View Lead', actionLink: 'https://example.com', idempotencyKey: 'assignment/123' });
