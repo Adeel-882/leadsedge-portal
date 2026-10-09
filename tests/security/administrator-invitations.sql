@@ -1,0 +1,96 @@
+\set ON_ERROR_STOP on
+create function pg_temp.assert_true(value boolean,label text) returns void language plpgsql as $$begin if value is distinct from true then raise exception 'Assertion failed: %',label; end if; end;$$;
+create function pg_temp.must_deny(statement text) returns void language plpgsql as $$begin
+ begin execute statement; exception when others then return; end;
+ raise exception 'Expected rejection: %',statement;
+end;$$;
+set role anon;
+select pg_temp.must_deny($q$select public.prepare_administrator_invitation('No One','nobody@example.test')$q$);
+reset role;
+set role authenticated;
+set request.jwt.claim.role='authenticated';
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000020';
+select pg_temp.must_deny($q$select public.prepare_administrator_invitation('Client Attack','attack@example.test')$q$);
+select pg_temp.must_deny($q$update public.users set role='admin' where id=auth.uid()$q$);
+select pg_temp.assert_true((select count(*)=1 from public.projects),'client only sees own project');
+select pg_temp.assert_true((select count(*)=0 from public.administrator_invitations),'client cannot list invitations');
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000001';
+select pg_temp.must_deny($q$update public.users set role='admin' where email='client@example.test'$q$);
+select pg_temp.must_deny($q$select public.prepare_administrator_invitation('Existing Admin','ADMIN-A@example.test')$q$);
+select pg_temp.must_deny($q$select public.prepare_administrator_invitation('Existing Client','client@example.test')$q$);
+select id as invitation_b from public.prepare_administrator_invitation('Admin B','admin-b@example.test') \gset
+select pg_temp.must_deny($q$select public.prepare_administrator_invitation('Duplicate','admin-b@example.test')$q$);
+select pg_temp.must_deny($q$insert into public.administrator_invitations(email,full_name,invited_by) values('forged@example.test','Forged Admin',auth.uid())$q$);
+reset role;
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values('10000000-0000-4000-8000-000000000002','admin-b@example.test',now(),jsonb_build_object('role','admin','administrator_invitation',:'invitation_b'));
+select pg_temp.assert_true((select role='client' from public.users where email='admin-b@example.test'),'metadata cannot promote');
+set role service_role;
+set request.jwt.claim.role='service_role';
+select public.bind_administrator_invitation(:'invitation_b','10000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001');
+reset role;
+set role authenticated;
+set request.jwt.claim.role='authenticated';
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000020';
+select pg_temp.must_deny(format('select public.accept_administrator_invitation(%L)',:'invitation_b'));
+select pg_temp.must_deny(format('select public.bind_administrator_invitation(%L,auth.uid(),auth.uid())',:'invitation_b'));
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
+select public.accept_administrator_invitation(:'invitation_b');
+select pg_temp.assert_true(public.is_admin(),'new admin has identical existing role');
+select pg_temp.assert_true((select count(*)=2 from public.projects),'new admin can read all projects through existing RLS');
+select pg_temp.must_deny(format('select public.accept_administrator_invitation(%L)',:'invitation_b'));
+select pg_temp.assert_true((select count(*)=1 from public.administrator_invitations where status='accepted'),'single acceptance');
+select id as invitation_c from public.prepare_administrator_invitation('Admin C','admin-c@example.test') \gset
+select pg_temp.assert_true((select invited_by=auth.uid() from public.administrator_invitations where id=:'invitation_c'),'new admin invites next admin');
+select public.revoke_administrator_invitation(:'invitation_c');
+reset role;
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values('10000000-0000-4000-8000-000000000003','admin-c@example.test',now(),jsonb_build_object('administrator_invitation',:'invitation_c'));
+-- Simulate a link delivered before revocation; binding cannot re-open it.
+update public.administrator_invitations set auth_user_id='10000000-0000-4000-8000-000000000003' where id=:'invitation_c';
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000003';
+select pg_temp.must_deny(format('select public.accept_administrator_invitation(%L)',:'invitation_c'));
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
+select id as expired_invitation from public.prepare_administrator_invitation('Expired Admin','expired@example.test') \gset
+reset role;
+update public.administrator_invitations set created_at=now()-interval '2 days',expires_at=now()-interval '1 day' where id=:'expired_invitation';
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values('10000000-0000-4000-8000-000000000004','expired@example.test',now(),jsonb_build_object('administrator_invitation',:'expired_invitation'));
+update public.administrator_invitations set auth_user_id='10000000-0000-4000-8000-000000000004' where id=:'expired_invitation';
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000004';
+select pg_temp.must_deny(format('select public.accept_administrator_invitation(%L)',:'expired_invitation'));
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
+select id as fresh_invitation from public.prepare_administrator_invitation('Expired Admin','expired@example.test',:'expired_invitation') \gset
+select pg_temp.assert_true((select status='revoked' from public.administrator_invitations where id=:'expired_invitation'),'resend revokes old generation');
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000004';
+select public.accept_administrator_invitation(:'fresh_invitation');
+reset role;
+select pg_temp.must_deny($q$insert into public.clients(auth_user_id,email) values('10000000-0000-4000-8000-000000000004','expired@example.test')$q$);
+select pg_temp.assert_true((select count(*)=3 from public.users where role='admin'),'exactly three activated fixture administrators');
+select pg_temp.assert_true(not has_function_privilege('anon','public.prepare_administrator_invitation(text,text,uuid)','execute'),'no anonymous execute');
+select pg_temp.assert_true(not has_function_privilege('authenticated','public.bind_administrator_invitation(uuid,uuid,uuid)','execute'),'binding is service-only');
+select pg_temp.assert_true(not has_column_privilege('authenticated','public.users','role','update'),'no direct role update privilege');
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000001';
+select id as conflict_invitation from public.prepare_administrator_invitation('Conflict Admin','conflict@example.test') \gset
+reset role;
+insert into auth.users(id,email,raw_user_meta_data) values('10000000-0000-4000-8000-000000000006','conflict@example.test',jsonb_build_object('administrator_invitation',:'conflict_invitation'));
+set role service_role;
+set request.jwt.claim.role='service_role';
+select public.bind_administrator_invitation(:'conflict_invitation','10000000-0000-4000-8000-000000000006','10000000-0000-4000-8000-000000000001');
+reset role;
+set role authenticated;
+set request.jwt.claim.role='authenticated';
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000006';
+select pg_temp.must_deny(format('select public.accept_administrator_invitation(%L)',:'conflict_invitation'));
+reset role;
+update auth.users set email_confirmed_at=now(),email='changed@example.test' where id='10000000-0000-4000-8000-000000000006';
+set role authenticated;
+select pg_temp.must_deny(format('select public.accept_administrator_invitation(%L)',:'conflict_invitation'));
+reset role;
+update auth.users set email='conflict@example.test' where id='10000000-0000-4000-8000-000000000006';
+insert into public.clients(auth_user_id,email) values('10000000-0000-4000-8000-000000000006','conflict@example.test');
+set role authenticated;
+select pg_temp.must_deny(format('select public.accept_administrator_invitation(%L)',:'conflict_invitation'));
+reset role;
+select pg_temp.assert_true((select role='client' from public.users where email='conflict@example.test'),'late client association prevents conversion');
+select 'DIRECT DATABASE AUTHORIZATION TESTS PASSED' as result;

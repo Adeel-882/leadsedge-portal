@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AuthErrorReason } from './auth-flow';
 import type { Role } from './types';
+import { administratorInvitationId } from './administrator-invitations';
 
 export type SessionCompletion =
   | { ok: true; role: Role }
@@ -16,7 +17,17 @@ export type SessionCompletion =
  * with a useful reason instead of dropping a half-authorized viewer into a
  * shell that will bounce them.
  */
-export async function completeAuthenticatedSession(supabase: SupabaseClient, userId: string): Promise<SessionCompletion> {
+export async function completeAuthenticatedSession(supabase: SupabaseClient, userId: string, requestedNext?: string | null): Promise<SessionCompletion> {
+  const invitationId = administratorInvitationId(requestedNext);
+  if (invitationId) {
+    // Only this explicitly addressed invitation can activate this verified user.
+    // Ordinary login/client invitation paths make no additional RPC call.
+    const { data, error } = await supabase.rpc('accept_administrator_invitation', { invitation_id: invitationId });
+    if (error || data !== userId) {
+      await supabase.auth.signOut({ scope: 'local' });
+      return { ok: false, reason: 'unauthorized', stage: 'administrator_invitation', code: 'invitation_unavailable' };
+    }
+  }
   const { data: profile, error: profileError } = await supabase
     .from('users')
     .select('role')

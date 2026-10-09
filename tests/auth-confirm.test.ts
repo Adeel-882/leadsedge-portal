@@ -221,6 +221,41 @@ describe('scanner-resistant TokenHash confirmation', () => {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'publishable-test-key';
   });
 
+  it.each([
+    ['desktop Chrome', 'Mozilla/5.0 Chrome/130.0.0.0 Safari/537.36'],
+    ['mobile Chrome', 'Mozilla/5.0 (Linux; Android 14) Chrome/130.0.0.0 Mobile Safari/537.36'],
+  ])('completes an administrator invitation via explicit Continue for %s', async (_label, userAgent) => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://portal.leadsedge.us');
+    const invitationId = '10000000-0000-4000-8000-000000000001';
+    const next = `/admin?admin_invitation=${invitationId}`;
+    const internal = 'http://portal.leadsedge.us/auth/confirm';
+    const headers = { Host: 'portal.leadsedge.us', 'X-Forwarded-Proto': 'https', 'User-Agent': userAgent };
+    mocks.activateCurrentClient.mockImplementation(async (name, args) => {
+      expect(name).toBe('accept_administrator_invitation');
+      expect(args).toEqual({ invitation_id: invitationId });
+      mocks.profileRole = 'admin';
+      return { data: 'user-fixture', error: null };
+    });
+    const first = await GET(new NextRequest(`${internal}?token_hash=${tokenHash}&type=invite&next=${encodeURIComponent(next)}`, { headers }));
+    const html = await first.text();
+    const cookie = first.headers.get('set-cookie')!.match(/leadsedge_auth_confirmation=([^;]+)/)![1];
+    const nonce = html.match(/name="confirmation_nonce" value="([^"]+)"/)![1];
+    expect(html).not.toContain(tokenHash);
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    expect(mocks.activateCurrentClient).not.toHaveBeenCalled();
+    const repeated = await GET(new NextRequest(`${internal}?token_hash=${tokenHash}&type=invite&next=${encodeURIComponent(next)}`, { headers: { ...headers, Cookie: `leadsedge_auth_confirmation=${cookie}` } }));
+    expect(await repeated.text()).toContain(nonce);
+    const response = await POST(new NextRequest(internal, { method: 'POST', headers: {
+      ...headers, Origin: 'null', 'Sec-Fetch-Site': 'same-origin', 'Content-Type': 'application/x-www-form-urlencoded', Cookie: `leadsedge_auth_confirmation=${cookie}`,
+    }, body: new URLSearchParams({ confirmation_nonce: nonce }) }));
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe('https://portal.leadsedge.us/admin');
+    expect(response.headers.get('set-cookie')).toContain('sdk-generated-session-fixture=');
+    expect(mocks.verifyOtp).toHaveBeenCalledExactlyOnceWith({ token_hash: tokenHash, type: 'invite' });
+    expect(mocks.activateCurrentClient).toHaveBeenCalledTimes(1);
+    expect(mocks.exchangeCodeForSession).not.toHaveBeenCalled();
+  });
+
   it('renders a non-consuming confirmation page with protected server handoff state', async () => {
     const { response, html } = await preparedConfirmation();
 

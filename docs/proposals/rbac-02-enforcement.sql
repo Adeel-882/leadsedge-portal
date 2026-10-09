@@ -1,3 +1,4 @@
+-- CANCELLED by user: historical RBAC proposal only. DO NOT APPLY. Replaced by simple equal-admin invitations.
 -- PROPOSAL ONLY; not applied. Execute only with approved application cutover.
 -- New migration, never rewrite a historical migration.
 -- Depends on rbac-01-foundation.sql and explicit bootstrap approval.

@@ -1,3 +1,5 @@
+**CANCELLED by user on 2026-10-09. Historical proposal only; do not implement or apply its SQL. The approved direction is simple equal-admin invitations, with no RBAC or Super Admin bootstrap.**
+
 # Multi-admin RBAC: audit and approval proposal
 
 Date: 2026-10-09. Repository baseline: `9cb5605610f4d3213c91f554f168088e9e1a47e4`.

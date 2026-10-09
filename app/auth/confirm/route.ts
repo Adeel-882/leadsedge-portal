@@ -4,6 +4,7 @@ import { completeAuthenticatedSession } from '@/lib/auth-session';
 import { resolveRequestOrigin } from '@/lib/request-origin';
 import { createResponseBoundSupabaseClient } from '@/lib/supabase/response-bound';
 import { externalRequestUrl } from '@/lib/app-origin';
+import { administratorInvitationId } from '@/lib/administrator-invitations';
 
 const confirmationCookie = 'leadsedge_auth_confirmation';
 const confirmationLifetimeSeconds = 10 * 60;
@@ -386,13 +387,14 @@ export async function POST(request: NextRequest) {
     return clearConfirmationCookie(response, url);
   }
 
-  const completion = await completeAuthenticatedSession(supabase, verification.user.id);
+  const completion = await completeAuthenticatedSession(supabase, verification.user.id, state.next);
   if (!completion.ok) {
     logConfirmation('POST_AUTHORIZATION_DENIED', { authorizationStage: completion.stage, code: completion.code });
     return clearConfirmationCookie(attachCookies(errorRedirect(url, completion.reason)), url);
   }
 
-  const response = attachCookies(secureResponse(NextResponse.redirect(new URL(destinationForRole(completion.role, state.next), url.origin), 303)));
+  const destination = administratorInvitationId(state.next) ? '/admin' : state.next;
+  const response = attachCookies(secureResponse(NextResponse.redirect(new URL(destinationForRole(completion.role, destination), url.origin), 303)));
   traceConfirmation(request, 'POST_COMPLETE', { role: completion.role });
   return clearConfirmationCookie(response, url);
 }

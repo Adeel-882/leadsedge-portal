@@ -1,3 +1,4 @@
+-- CANCELLED by user: historical RBAC proposal only. DO NOT APPLY. Replaced by simple equal-admin invitations.
 -- PROPOSAL ONLY. Not applied, not in supabase/migrations.
 -- Must be reviewed together with rbac-02-enforcement.sql and the application cutover.
 -- Explicit approval of account backfill is required before executing ANY file.
