@@ -78,9 +78,13 @@ it('contains provider failure, stores safe metadata and retries with the same ke
   expect(state.send.mock.calls[0][0]).toEqual(state.send.mock.calls[1][0]);
   warn.mockRestore();
 });
-it('uses the existing secure login next destination without tokens or a cross-origin redirect', () => {
+it('uses a reusable task destination without any authentication credentials', () => {
   const url = new URL(assignmentEmailLink('task-1'));
   expect(url.origin).toBe('http://127.0.0.1:3000');
-  expect(url.pathname).toBe('/auth/sign-in');
-  expect(url.searchParams.get('next')).toBe('/portal/tasks/task-1');
+  expect(url.pathname).toBe('/portal/tasks/task-1');
+  expect(url.search).toBe('');
+});
+it('generates the permanent HTTPS task URL even with the old production host configured', () => {
+  process.env.NEXT_PUBLIC_APP_URL = 'https://khaki-crocodile-610570.hostingersite.com';
+  expect(assignmentEmailLink('task-1')).toBe('https://portal.leadsedge.us/portal/tasks/task-1');
 });

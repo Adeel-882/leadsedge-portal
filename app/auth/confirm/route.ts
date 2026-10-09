@@ -188,7 +188,28 @@ function confirmationPage(nonce: string) {
  * logged: only shapes, presence flags and provider error codes.
  */
 function logConfirmation(stage: string, detail: Record<string, unknown>) {
-  console.warn('[auth-confirm]', JSON.stringify({ stage, ...detail }));
+  console.warn('[auth-confirm]', JSON.stringify({ timestamp: new Date().toISOString(), ...detail, stage }));
+}
+
+/** Opt-in tracing; deliberately excludes URL queries, headers with credentials, and state values. */
+function traceConfirmation(request: NextRequest, stage: string, detail: Record<string, boolean | string | null> = {}) {
+  if (process.env.LEADSEDGE_AUTH_DIAGNOSTICS !== 'true') return;
+  const url = new URL(request.url);
+  const allowedSite = ['same-origin', 'same-site', 'cross-site', 'none'];
+  const allowedMode = ['navigate', 'cors', 'no-cors', 'same-origin'];
+  const site = request.headers.get('sec-fetch-site');
+  const mode = request.headers.get('sec-fetch-mode');
+  logConfirmation(stage, {
+    method: request.method,
+    path: '/auth/confirm',
+    secFetchSite: site && allowedSite.includes(site) ? site : null,
+    secFetchMode: mode && allowedMode.includes(mode) ? mode : null,
+    tokenHashPresent: url.searchParams.has('token_hash'),
+    codePresent: url.searchParams.has('code'),
+    type: parsePortalEmailOtpType(url.searchParams.get('type')),
+    stateCookiePresent: Boolean(request.cookies.get(confirmationCookie)?.value),
+    ...detail,
+  });
 }
 
 /**
@@ -248,6 +269,7 @@ function isSameOriginPost(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  traceConfirmation(request, 'GET_RECEIVED', { consumesCredential: false });
   const url = externalRequestUrl(request);
   const next = normalizeConfirmationNext(url.searchParams.get('next'), url);
 
@@ -314,10 +336,12 @@ export async function GET(request: NextRequest) {
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   }));
   response.cookies.set(confirmationCookie, encodeConfirmation(state), confirmationCookieOptions(url));
+  traceConfirmation(request, 'GET_READY', { consumesCredential: false, stateReused: Boolean(reusable), credentialKind: credential.kind });
   return response;
 }
 
 export async function POST(request: NextRequest) {
+  traceConfirmation(request, 'POST_RECEIVED');
   const url = externalRequestUrl(request);
   if (!isSameOriginPost(request)) {
     logConfirmation('POST_ORIGIN_REJECTED', { originMatches: false, ...describeOrigin(request) });
@@ -345,6 +369,8 @@ export async function POST(request: NextRequest) {
   }
   const { supabase, attachCookies } = routeClient;
 
+  traceConfirmation(request, 'POST_VERIFY', { credentialKind: state.credential.kind });
+
   const { data: verification, error: verificationError } = state.credential.kind === 'token_hash'
     ? await supabase.auth.verifyOtp({ token_hash: state.credential.tokenHash, type: state.credential.type })
     : await supabase.auth.exchangeCodeForSession(state.credential.code);
@@ -362,10 +388,11 @@ export async function POST(request: NextRequest) {
 
   const completion = await completeAuthenticatedSession(supabase, verification.user.id);
   if (!completion.ok) {
-    logConfirmation('POST_AUTHORIZATION_DENIED', { stage: completion.stage, code: completion.code });
+    logConfirmation('POST_AUTHORIZATION_DENIED', { authorizationStage: completion.stage, code: completion.code });
     return clearConfirmationCookie(attachCookies(errorRedirect(url, completion.reason)), url);
   }
 
   const response = attachCookies(secureResponse(NextResponse.redirect(new URL(destinationForRole(completion.role, state.next), url.origin), 303)));
+  traceConfirmation(request, 'POST_COMPLETE', { role: completion.role });
   return clearConfirmationCookie(response, url);
 }

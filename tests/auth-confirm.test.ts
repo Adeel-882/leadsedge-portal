@@ -103,6 +103,42 @@ function query(table: string) {
 describe('scanner-resistant TokenHash confirmation', () => {
   afterEach(() => vi.unstubAllEnvs());
 
+  it('traces successful handoff without logging credentials, cookies or nonce', async () => {
+    vi.stubEnv('LEADSEDGE_AUTH_DIAGNOSTICS', 'true');
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { cookie, nonce } = await preparedConfirmation();
+      await POST(postRequest(cookie, nonce));
+      const output = JSON.stringify(log.mock.calls);
+      for (const value of [tokenHash, cookie, nonce, 'session-fixture']) expect(output).not.toContain(value);
+      for (const stage of ['GET_RECEIVED', 'GET_READY', 'POST_RECEIVED', 'POST_VERIFY', 'POST_COMPLETE']) expect(output).toContain(stage);
+    } finally { log.mockRestore(); }
+  });
+
+  it('rejects a second POST after the browser applies the cleared state cookie', async () => {
+    const { cookie, nonce } = await preparedConfirmation();
+    const first = await POST(postRequest(cookie, nonce));
+    expect(first.headers.get('set-cookie')).toContain('Max-Age=0');
+    const second = await POST(postRequest('', nonce));
+    expect(new URL(second.headers.get('location')!).searchParams.get('reason')).toBe('invalid');
+    expect(mocks.verifyOtp).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves a task deep link after invite confirmation', async () => {
+    const { cookie, nonce } = await preparedConfirmation({ type: 'invite', next: '/portal/tasks/task-fixture' });
+    const response = await POST(postRequest(cookie, nonce));
+    expect(new URL(response.headers.get('location')!).pathname).toBe('/portal/tasks/task-fixture');
+    expect(mocks.verifyOtp).toHaveBeenCalledWith({ token_hash: tokenHash, type: 'invite' });
+  });
+
+  it('preserves a task deep link through the normal PKCE confirmation', async () => {
+    const { cookie, nonce } = await preparedRedirect(`next=%2Fportal%2Ftasks%2Ftask-fixture&code=${authorizationCode}`);
+    const response = await POST(postRequest(cookie, nonce));
+    expect(new URL(response.headers.get('location')!).pathname).toBe('/portal/tasks/task-fixture');
+    expect(mocks.exchangeCodeForSession).toHaveBeenCalledTimes(1);
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['client', 'token_hash', '/portal'],
     ['admin', 'token_hash', '/admin'],

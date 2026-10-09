@@ -26,8 +26,7 @@ async function recipient(admin: Admin, taskId: string) {
 }
 
 export function assignmentEmailLink(taskId: string) {
-  const url = new URL('/auth/sign-in', appUrl());
-  url.searchParams.set('next', `/portal/tasks/${taskId}`);
+  const url = new URL(`/portal/tasks/${encodeURIComponent(taskId)}`, appUrl());
   return url.toString();
 }
 

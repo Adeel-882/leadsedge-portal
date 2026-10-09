@@ -9,6 +9,9 @@ export async function proxy(request: NextRequest) {
   const requestId = crypto.randomUUID();
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-request-id', requestId);
+  // Server layouts need the document destination when redirecting a logged-out
+  // visitor. Always overwrite caller input; this header never grants access.
+  requestHeaders.set('x-leadsedge-pathname', request.nextUrl.pathname);
   if (!hasSupabaseEnv()) return NextResponse.next();
   let response = NextResponse.next({ request: { headers: requestHeaders } });
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {

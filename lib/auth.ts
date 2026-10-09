@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
+import { destinationForRole } from './auth-flow';
 import { cache } from 'react';
 import { demoAdmin, demoClientViewer } from './demo-data';
 import { isDemoMode } from './env';
@@ -49,7 +51,11 @@ export async function requireBootstrapRole(role: Role): Promise<PortalBootstrap>
     unread: { messages: 0, notifications: 0 },
   };
   const bootstrap = await getRequestBootstrap();
-  if (!bootstrap) redirect(`/auth/sign-in?next=${role === 'admin' ? '/admin' : '/portal'}`);
+  if (!bootstrap) {
+    const pathname = (await headers()).get('x-leadsedge-pathname');
+    const next = destinationForRole(role, pathname);
+    redirect(`/auth/sign-in?next=${encodeURIComponent(next)}`);
+  }
   if (bootstrap.viewer.role !== role) redirect(bootstrap.viewer.role === 'admin' ? '/admin' : '/portal');
   return bootstrap;
 }
