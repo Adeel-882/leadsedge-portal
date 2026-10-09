@@ -10,7 +10,7 @@ export const screenLoaders = {
   dashboard: async () => { const [projects, clients, upcomingMeeting] = await Promise.all([getAdminProjects(), getAdminClients(), getNextMeeting()]); return { projects, clients, upcomingMeeting }; },
   people: async (args: string[]) => getPeople(args[0] || '', Math.max(1, Math.min(10000, Number(args[1]) || 1))),
   templates: async () => getTemplates(),
-  home: async () => { const [projects, notifications, nextMeeting, allTasks] = await Promise.all([getClientProjects(), getNotifications(5), getNextMeeting(), getClientTaskList()]); return { projects, notifications, nextMeeting, allTasks }; },
+  home: async () => { const [projects, notifications, allTasks] = await Promise.all([getClientProjects(), getNotifications(5), getClientTaskList()]); return { projects, notifications, allTasks }; },
   tasks: async () => getClientTaskList(),
   task: async (args: string[]) => {
     const viewer = await requireRole('client');

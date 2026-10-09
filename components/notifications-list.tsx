@@ -6,15 +6,16 @@ import { CalendarBlank, ChatCircleDots, CheckCircle, PaperPlaneTilt, Sparkle } f
 import { notifyUnreadCountsChanged } from '@/components/unread-counts';
 import { formatTime } from '@/lib/format';
 import type { NotificationRecord } from '@/lib/types';
+import { clientNotificationDestination } from '@/lib/client-navigation';
 
-export function NotificationsList({ notifications }: { notifications: NotificationRecord[] }) {
+export function NotificationsList({ notifications, clientPortal = false }: { notifications: NotificationRecord[]; clientPortal?: boolean }) {
   const router = useRouter();
   const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(() => new Set());
   const [updatingAll, setUpdatingAll] = useState(false);
   const items = useMemo(() => notifications.map((item) => locallyReadIds.has(item.id) ? { ...item, readAt: item.readAt || new Date().toISOString() } : item), [locallyReadIds, notifications]);
 
   async function read(item: NotificationRecord) {
-    const target = item.targetUrl.startsWith('/') && !item.targetUrl.startsWith('//') ? item.targetUrl : '/';
+    const target = clientPortal ? clientNotificationDestination(item.targetUrl) : item.targetUrl.startsWith('/') && !item.targetUrl.startsWith('//') ? item.targetUrl : '/';
     if (!item.readAt) {
       const response = await fetch(`/api/notifications/${item.id}`, { method: 'PATCH' });
       if (!response.ok) return;

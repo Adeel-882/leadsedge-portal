@@ -4,7 +4,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 
 import { CacheLink as Link } from '@/components/cache-link';
 import { usePathname } from 'next/navigation';
-import { Bell, CalendarDots, ChatCircleDots, CheckSquare, House } from '@phosphor-icons/react';
+import { Bell, ChatCircleDots, CheckSquare, House } from '@phosphor-icons/react';
 import { Brand } from '@/components/brand';
 import { useUnreadCounts } from '@/components/unread-counts';
 import { useTaskAttentionCount } from '@/components/task-attention-count';
@@ -14,7 +14,6 @@ const items = [
   { href: '/portal', label: 'Home', Icon: House },
   { href: '/portal/tasks', label: 'Tasks', Icon: CheckSquare },
   { href: '/portal/messages', label: 'Messages', Icon: ChatCircleDots },
-  { href: '/portal/meetings', label: 'Meetings', Icon: CalendarDots },
 ];
 
 export function PortalShell({ children, clientName, viewerId, messageUnreadCount, notificationUnreadCount }: { children: React.ReactNode; clientName: string; viewerId: string; messageUnreadCount: number; notificationUnreadCount: number }) {

@@ -3,11 +3,12 @@ import { CachedScreen } from '../cached-screen';
 import type { ScreenData } from '@/lib/screen-data';
 import type { Viewer } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowRight, CalendarBlank, ChatCircleDots, CheckCircle, ClipboardText, Sparkle } from '@phosphor-icons/react';
-import { formatDate, formatTime } from '@/lib/format';
+import { ArrowRight, ChatCircleDots, CheckCircle, ClipboardText, Sparkle } from '@phosphor-icons/react';
+import { formatTime } from '@/lib/format';
+import { clientNotificationDestination } from '@/lib/client-navigation';
 
 function HomeView({ data, viewer, unread }: { data: ScreenData<'home'>; viewer: Viewer; unread: {messages:number;notifications:number} }) {
-  const { projects, notifications, nextMeeting, allTasks } = data;
+  const { projects, notifications, allTasks } = data;
   const primary = projects[0];
   const tasks = primary ? allTasks.filter((task) => task.projectId === primary.id) : [];
   const active = tasks.filter((task) => task.status === 'active');
@@ -15,7 +16,7 @@ function HomeView({ data, viewer, unread }: { data: ScreenData<'home'>; viewer: 
 
   return <div>
     <header className="page-header flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div><p className="page-eyebrow">Welcome back, {viewer.fullName}</p><h1 className="page-title">Here is what needs your attention</h1><p className="page-subtitle">Your leads, feedback, messages, and meetings for {primary?.projectName || 'your workspace'}.</p></div>
+      <div><p className="page-eyebrow">Welcome back, {viewer.fullName}</p><h1 className="page-title">Here is what needs your attention</h1><p className="page-subtitle">Your leads, feedback, and messages for {primary?.projectName || 'your workspace'}.</p></div>
       {primary && <Link prefetch={false} href="/portal/tasks" className="button-primary">Open tasks<ArrowRight size={15} aria-hidden /></Link>}
     </header>
 
@@ -31,14 +32,13 @@ function HomeView({ data, viewer, unread }: { data: ScreenData<'home'>; viewer: 
       </div>
     </section>
 
-    <section className="mt-3 grid gap-3 sm:grid-cols-2" aria-label="Messages and meetings">
+    <section className="mt-3" aria-label="Messages">
       <Link prefetch={false} href="/portal/messages" className="surface-flat flex items-center gap-4 p-5 transition hover:border-brand hover:bg-brand-soft"><span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-soft text-brand-text"><ChatCircleDots size={20} weight="fill" aria-hidden /></span><div><p className="text-sm font-bold">Messages</p><p className="mt-1 text-xs text-muted">{unread.messages ? `${unread.messages} unread ${unread.messages === 1 ? 'message' : 'messages'}` : 'No unread messages'}</p></div><ArrowRight className="ml-auto text-muted" size={16} aria-hidden /></Link>
-      <Link prefetch={false} href={nextMeeting ? `/portal/meetings/${nextMeeting.id}` : '/portal/meetings'} className="surface-flat flex items-center gap-4 p-5 transition hover:border-brand hover:bg-brand-soft"><span className="grid h-10 w-10 place-items-center rounded-lg bg-info-soft text-info"><CalendarBlank size={20} weight="fill" aria-hidden /></span><div><p className="text-sm font-bold">{nextMeeting ? 'Upcoming meeting' : 'Schedule a meeting'}</p><p className="mt-1 text-xs text-muted">{nextMeeting ? formatDate(nextMeeting.startAt, { dateStyle: 'medium', timeStyle: 'short', timeZone: nextMeeting.timezone }) : 'Choose an available time with your project owner'}</p></div><ArrowRight className="ml-auto text-muted" size={16} aria-hidden /></Link>
     </section>
 
     <section className="surface-flat mt-4 overflow-hidden">
       <div className="border-b border-line px-5 py-4"><h2 className="section-title">Recent activity</h2><p className="section-description">The latest updates from your workspace.</p></div>
-      {notifications.length ? <div>{notifications.map((item) => <Link prefetch={false} href={item.targetUrl.startsWith('/') && !item.targetUrl.startsWith('//') ? item.targetUrl : '/portal'} key={item.id} className="flex gap-3 border-b border-line px-5 py-4 last:border-b-0 hover:bg-brand-soft"><span className={`mt-1.5 h-2 w-2 flex-none rounded-full ${item.readAt ? 'bg-line-strong' : 'bg-brand'}`} aria-hidden /><div className="min-w-0"><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-sm leading-5 text-muted">{item.body}</p><p className="mt-1.5 text-[11px] text-muted">{formatTime(item.createdAt)}</p></div></Link>)}</div> : <p className="px-5 py-7 text-sm text-muted">No recent activity yet.</p>}
+      {notifications.length ? <div>{notifications.map((item) => <Link prefetch={false} href={clientNotificationDestination(item.targetUrl)} key={item.id} className="flex gap-3 border-b border-line px-5 py-4 last:border-b-0 hover:bg-brand-soft"><span className={`mt-1.5 h-2 w-2 flex-none rounded-full ${item.readAt ? 'bg-line-strong' : 'bg-brand'}`} aria-hidden /><div className="min-w-0"><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-sm leading-5 text-muted">{item.body}</p><p className="mt-1.5 text-[11px] text-muted">{formatTime(item.createdAt)}</p></div></Link>)}</div> : <p className="px-5 py-7 text-sm text-muted">No recent activity yet.</p>}
     </section>
   </div>;
 }
