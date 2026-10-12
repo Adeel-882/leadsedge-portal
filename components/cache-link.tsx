@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { NavigationPending } from './navigation-pending';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCacheIdentity } from './query-provider';
 import { screenUrl } from './cached-screen';
@@ -21,5 +22,5 @@ export function CacheLink(props: React.ComponentProps<typeof Link>) {
     // authorized data query alongside RSC navigation, not after it commits.
     // QueryClient deduplicates this with hover and the destination's useQuery.
     prefetch();
-  }}/>;
+  }}>{props.children}<NavigationPending /></Link>;
 }
