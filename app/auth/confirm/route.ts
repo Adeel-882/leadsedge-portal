@@ -17,8 +17,9 @@ const confirmationLifetimeSeconds = 10 * 60;
  *   auth email template is customised to use the TokenHash variable.
  * - `code`: what Supabase's own /auth/v1/verify appends to `emailRedirectTo`
  *   after it has already verified the emailed token. The built-in mailer sends
- *   that direct verification URL and the template cannot be edited without
- *   custom SMTP, so this is the shape every live sign-in email produces today.
+ *   that direct verification URL when its template uses ConfirmationURL.
+ *   The live provider template must be inspected; the redirect target alone
+ *   does not establish which shape the email contains.
  */
 type PendingCredential =
   | { kind: 'token_hash'; tokenHash: string; type: PortalEmailOtpType }
@@ -132,7 +133,7 @@ function normalizeConfirmationNext(value: string | null, url: URL) {
   try {
     const nested = new URL(value);
     if (nested.origin !== url.origin) return null;
-    if (nested.pathname === '/auth/callback') {
+    if (nested.pathname === '/auth/callback' || nested.pathname === '/auth/confirm') {
       const safe = safeInternalPath(nested.searchParams.get('next'), '');
       return safe || null;
     }

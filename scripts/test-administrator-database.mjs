@@ -24,6 +24,7 @@ try {
   run(['-f','supabase/migrations/202610090001_simple_admin_invitations.sql']);
   const result = run(['-f','tests/security/administrator-invitations.sql']);
   if (!result.includes('DIRECT DATABASE AUTHORIZATION TESTS PASSED')) throw new Error('Assertions did not finish');
+  run(['-f','tests/security/administrator-compatibility.sql']);
   const adminSession="set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='10000000-0000-4000-8000-000000000001';";
   const created=await Promise.all([concurrent(adminSession+"select public.prepare_administrator_invitation('Race Admin','race@example.test');"),concurrent(adminSession+"select public.prepare_administrator_invitation('Race Admin','race@example.test');")]);
   if(created.filter(r=>r.code===0).length!==1)throw Error('Concurrent creation must produce exactly one invitation');

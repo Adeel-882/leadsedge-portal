@@ -319,6 +319,51 @@ describe('scanner-resistant TokenHash confirmation', () => {
     expect(mocks.verifyOtp).not.toHaveBeenCalled();
   });
 
+  it('accepts a fresh browser confirmation without the requesting browser PKCE cookie', async () => {
+    mocks.profileRole = 'admin';
+    const scanner = await preparedConfirmation({ type: 'email', next: '/admin' });
+    const deviceB = await preparedConfirmation({ type: 'email', next: '/admin' });
+    expect(deviceB.nonce).not.toBe(scanner.nonce);
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    const response = await POST(postRequest(deviceB.cookie, deviceB.nonce));
+    expect(mocks.cookieAdapter?.getAll().map(cookie => cookie.name)).toEqual(['leadsedge_auth_confirmation']);
+    expect(mocks.verifyOtp).toHaveBeenCalledExactlyOnceWith({ token_hash: tokenHash, type: 'email' });
+    expect(mocks.exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(mocks.signOut).not.toHaveBeenCalled();
+    expect(new URL(response.headers.get('location')!).pathname).toBe('/admin');
+  });
+
+  it('fails closed when the provider rejects replay of a saved confirmation state', async () => {
+    mocks.profileRole = 'admin';
+    const { cookie, nonce } = await preparedConfirmation({ type: 'magiclink', next: '/admin' });
+    await POST(postRequest(cookie, nonce));
+    mocks.verifyOtp.mockResolvedValueOnce({ data: { user: null, session: null }, error: { code: 'otp_expired', name: 'AuthApiError', status: 403 } });
+    const replay = await POST(postRequest(cookie, nonce));
+    expect(new URL(replay.headers.get('location')!).searchParams.get('reason')).toBe('expired');
+    expect(mocks.exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(mocks.signOut).not.toHaveBeenCalled();
+  });
+
+  it('preserves task destinations nested in the proposed provider RedirectTo template', async () => {
+    const task = '/portal/tasks/task-fixture?tab=comments';
+    const next = `http://127.0.0.1:3000/auth/confirm?next=${encodeURIComponent(task)}`;
+    // NextRequest normalizes loopback in the test runtime; use its resulting
+    // external origin just as the deployed HTTPS origin is compared exactly.
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'http://127.0.0.1:3000');
+    const { cookie, nonce } = await preparedConfirmation({ type: 'email', next });
+    const response = await POST(new NextRequest('http://127.0.0.1:3000/auth/confirm', {
+      method: 'POST', headers: { host: '127.0.0.1:3000', origin: 'null', 'sec-fetch-site': 'same-origin', 'content-type': 'application/x-www-form-urlencoded', cookie: `leadsedge_auth_confirmation=${cookie}` },
+      body: new URLSearchParams({ confirmation_nonce: nonce }),
+    }));
+    expect(response.headers.get('location')).toBe(`http://127.0.0.1:3000${task}`);
+  });
+
+  it('rejects an external RedirectTo wrapper without redirecting outside the portal', async () => {
+    const { cookie, nonce } = await preparedConfirmation({ next: 'https://external.example/auth/confirm?next=/portal/tasks/foreign' });
+    const response = await POST(postRequest(cookie, nonce));
+    expect(new URL(response.headers.get('location')!).pathname).toBe('/portal');
+  });
+
   it('consumes the token exactly once on explicit POST and attaches session cookies', async () => {
     const { cookie, nonce } = await preparedConfirmation();
     const response = await POST(postRequest(cookie, nonce));
