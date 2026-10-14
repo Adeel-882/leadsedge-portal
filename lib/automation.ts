@@ -1,3 +1,4 @@
+import { automationHostedEmail } from './hosted-email';
 import { deliverAssignmentEmails } from './assignment-email';
 import { sendBrandedEmail } from './email';
 import { appUrl } from './env';
@@ -37,7 +38,7 @@ export async function processAutomationWork(limit = 20) {
         : row.email_type === 'task.assigned' ? `${template.taskTitle || 'A lead assignment'} is ready in your portal.`
           : `${template.title || 'Your meeting'}${template.startAt ? ` · ${new Date(template.startAt).toLocaleString('en-US', { timeZone: template.timezone || 'UTC', dateStyle: 'medium', timeStyle: 'short' })}` : ''}`;
     const actionLabel = row.email_type === 'feedback.requested' ? 'Leave Feedback' : row.email_type === 'feedback.submitted' ? 'View Feedback' : row.email_type === 'task.assigned' ? 'View Lead Assignment' : 'View Meeting';
-    const result = await sendBrandedEmail({ to: row.recipient_email, subject: `${title} — Leadsedge Portal`, heading: title, greetingName: template.clientName, body: detail, actionLabel, actionLink: targetUrl });
+    const result = await sendBrandedEmail({ to: row.recipient_email, hosted: automationHostedEmail(row.email_type, template, targetUrl), subject: `${title} — Leadsedge Portal`, heading: title, greetingName: template.clientName, body: detail, actionLabel, actionLink: targetUrl });
     if (result.ok) {
       await admin.from('email_outbox').update({ status: 'sent', provider_id: result.id, sent_at: new Date().toISOString() }).eq('id', row.id);
       await admin.from('email_deliveries').insert({ client_id: row.client_id, project_id: row.project_id, email_type: row.email_type, provider_id: result.id, status: 'sent' });

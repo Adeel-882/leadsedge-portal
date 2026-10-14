@@ -1,0 +1,58 @@
+[
+  {
+    "category": "client_invitation",
+    "id": "94112e04-e5d4-4092-8d62-ac588932e1f5",
+    "alias": "client-invitation",
+    "status": "draft",
+    "workspace": "broadigo",
+    "validatedForSending": false
+  },
+  {
+    "category": "task.assigned",
+    "id": "5bcdfc33-76bf-4ca9-aef7-736c6142cde9",
+    "alias": "new-lead-assigned",
+    "status": "draft",
+    "workspace": "broadigo",
+    "validatedForSending": false
+  },
+  {
+    "category": "feedback.requested",
+    "id": "6bbd86c6-bd54-4aa0-b027-ba2370ea2356",
+    "alias": "feedback-requested",
+    "status": "draft",
+    "workspace": "broadigo",
+    "validatedForSending": false
+  },
+  {
+    "category": "feedback.submitted",
+    "id": "9f622ee2-3d2e-48a1-b469-b0a01d85e884",
+    "alias": "feedback-submitted",
+    "status": "draft",
+    "workspace": "broadigo",
+    "validatedForSending": false
+  },
+  {
+    "category": "meeting.confirmation",
+    "id": "84d6d2dc-9f24-4810-9dba-8ac1ac404134",
+    "alias": "meeting-confirmation",
+    "status": "draft",
+    "workspace": "broadigo",
+    "validatedForSending": false
+  },
+  {
+    "category": "meeting.cancelled",
+    "id": "7290bdda-65af-47e4-9a40-dda065545048",
+    "alias": "meeting-cancellation",
+    "status": "draft",
+    "workspace": "broadigo",
+    "validatedForSending": false
+  },
+  {
+    "category": "meeting.reminder",
+    "id": "4837f003-6e1d-4e3b-9676-048c935857b2",
+    "alias": "meeting-reminder",
+    "status": "draft",
+    "workspace": "broadigo",
+    "validatedForSending": false
+  }
+]

@@ -1,0 +1,172 @@
+[
+  {
+    "category": "client_invitation",
+    "name": "Client Invitation",
+    "alias": "leadsedge-client-invitation",
+    "subject": "You're invited to LeadsEdge Portal",
+    "html": "client-invitation.html",
+    "variables": [
+      {
+        "key": "CLIENT_NAME",
+        "type": "string"
+      },
+      {
+        "key": "ACTION_URL",
+        "type": "string"
+      }
+    ],
+    "configurationPrefix": "RESEND_TEMPLATE_CLIENT_INVITATION"
+  },
+  {
+    "category": "task.assigned",
+    "name": "New Lead Assigned",
+    "alias": "leadsedge-task-assigned",
+    "subject": "New lead assigned in LeadsEdge Portal",
+    "html": "task-assigned.html",
+    "variables": [
+      {
+        "key": "CLIENT_NAME",
+        "type": "string"
+      },
+      {
+        "key": "TASK_TITLE",
+        "type": "string"
+      },
+      {
+        "key": "ACTION_URL",
+        "type": "string"
+      }
+    ],
+    "configurationPrefix": "RESEND_TEMPLATE_TASK_ASSIGNED"
+  },
+  {
+    "category": "feedback.requested",
+    "name": "Feedback Requested",
+    "alias": "leadsedge-feedback-requested",
+    "subject": "How did this lead go? — Leadsedge Portal",
+    "html": "feedback-requested.html",
+    "variables": [
+      {
+        "key": "CLIENT_NAME",
+        "type": "string"
+      },
+      {
+        "key": "TASK_TITLE",
+        "type": "string"
+      },
+      {
+        "key": "PROJECT_NAME",
+        "type": "string"
+      },
+      {
+        "key": "ACTION_URL",
+        "type": "string"
+      }
+    ],
+    "configurationPrefix": "RESEND_TEMPLATE_FEEDBACK_REQUESTED"
+  },
+  {
+    "category": "feedback.submitted",
+    "name": "Feedback Submitted",
+    "alias": "leadsedge-feedback-submitted",
+    "subject": "Feedback submitted — Leadsedge Portal",
+    "html": "feedback-submitted.html",
+    "variables": [
+      {
+        "key": "CLIENT_NAME",
+        "type": "string"
+      },
+      {
+        "key": "TASK_TITLE",
+        "type": "string"
+      },
+      {
+        "key": "PROJECT_NAME",
+        "type": "string"
+      },
+      {
+        "key": "ACTION_URL",
+        "type": "string"
+      }
+    ],
+    "configurationPrefix": "RESEND_TEMPLATE_FEEDBACK_SUBMITTED"
+  },
+  {
+    "category": "meeting.confirmation",
+    "name": "Meeting Confirmation",
+    "alias": "leadsedge-meeting-confirmation",
+    "subject": "Your Leadsedge meeting is confirmed — Leadsedge Portal",
+    "html": "meeting-confirmation.html",
+    "variables": [
+      {
+        "key": "MEETING_TITLE",
+        "type": "string"
+      },
+      {
+        "key": "START_DISPLAY",
+        "type": "string"
+      },
+      {
+        "key": "TIMEZONE",
+        "type": "string"
+      },
+      {
+        "key": "ACTION_URL",
+        "type": "string"
+      }
+    ],
+    "configurationPrefix": "RESEND_TEMPLATE_MEETING_CONFIRMATION"
+  },
+  {
+    "category": "meeting.cancelled",
+    "name": "Meeting Cancellation",
+    "alias": "leadsedge-meeting-cancelled",
+    "subject": "Meeting cancelled — Leadsedge Portal",
+    "html": "meeting-cancelled.html",
+    "variables": [
+      {
+        "key": "MEETING_TITLE",
+        "type": "string"
+      },
+      {
+        "key": "START_DISPLAY",
+        "type": "string"
+      },
+      {
+        "key": "TIMEZONE",
+        "type": "string"
+      },
+      {
+        "key": "ACTION_URL",
+        "type": "string"
+      }
+    ],
+    "configurationPrefix": "RESEND_TEMPLATE_MEETING_CANCELLED"
+  },
+  {
+    "category": "meeting.reminder",
+    "name": "Meeting Reminder",
+    "alias": "leadsedge-meeting-reminder",
+    "subject": "Meeting reminder — Leadsedge Portal",
+    "html": "meeting-reminder.html",
+    "variables": [
+      {
+        "key": "MEETING_TITLE",
+        "type": "string"
+      },
+      {
+        "key": "START_DISPLAY",
+        "type": "string"
+      },
+      {
+        "key": "TIMEZONE",
+        "type": "string"
+      },
+      {
+        "key": "ACTION_URL",
+        "type": "string"
+      }
+    ],
+    "configurationPrefix": "RESEND_TEMPLATE_MEETING_REMINDER"
+  }
+]

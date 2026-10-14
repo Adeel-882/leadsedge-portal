@@ -103,6 +103,7 @@ export async function deliverAssignmentEmails(ids?: string[], limit = 20) {
       // Freeze queue-time content: the provider's idempotency key must have a stable payload.
       const template = row.template_data as { clientName: string; taskTitle: string };
       const result = await sendBrandedEmail({ to: row.recipient_email,
+        hosted: { category: 'task.assigned', variables: { CLIENT_NAME: template.clientName, TASK_TITLE: template.taskTitle, ACTION_URL: assignmentEmailLink(row.task_id!) } },
         subject: 'New lead assigned in LeadsEdge Portal', heading: 'A new lead is ready',
         greetingName: template.clientName,
         body: `A new lead has been assigned to you in LeadsEdge Portal. ${template.taskTitle}. Open your portal to review the lead details, continue the conversation, and manage the assignment.`,

@@ -1,7 +1,10 @@
 import { Resend } from 'resend';
+import { sendHostedEmail, type HostedEmail } from './hosted-email';
 
-export async function sendBrandedEmail({ to, subject, heading, greetingName, body, actionLabel, actionLink, idempotencyKey }: { to: string; subject: string; heading: string; greetingName?: string; body: string; actionLabel: string; actionLink: string; idempotencyKey?: string }) {
+export async function sendBrandedEmail({ to, subject, heading, greetingName, body, actionLabel, actionLink, idempotencyKey, hosted }: { to: string; subject: string; heading: string; greetingName?: string; body: string; actionLabel: string; actionLink: string; idempotencyKey?: string; hosted?: HostedEmail }) {
   if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) return { ok: false as const, error: 'Email delivery is not configured.' };
+  const hostedResult = await sendHostedEmail(to, hosted, idempotencyKey);
+  if (hostedResult) return hostedResult;
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { data, error } = await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL,
@@ -15,6 +18,8 @@ export async function sendBrandedEmail({ to, subject, heading, greetingName, bod
 
 export async function sendPortalInvitation({ to, clientName, actionLink }: { to: string; clientName: string; projectName: string; actionLink: string }) {
   if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) return { ok: false as const, error: 'Email delivery is not configured. Add RESEND_API_KEY and RESEND_FROM_EMAIL, then resend the invitation.' };
+  const hostedResult = await sendHostedEmail(to, { category: 'client_invitation', variables: { CLIENT_NAME: clientName, ACTION_URL: actionLink } });
+  if (hostedResult) return hostedResult;
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { data, error } = await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL,
