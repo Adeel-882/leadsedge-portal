@@ -89,3 +89,10 @@ export function resolveMessageThread(threads: MessageWorkspaceThread[], requeste
   if (requested) return requested;
   return threads.find((thread) => thread.unreadCount > 0) || threads[0] || null;
 }
+
+export type MessageFilter = 'all' | 'unread' | 'project' | 'task';
+export function filterMessageThreads(threads: MessageWorkspaceThread[], query: string, filter: MessageFilter) {
+  const search = query.trim().toLowerCase();
+  return threads.filter(thread => (filter === 'all' || (filter === 'unread' ? thread.unreadCount > 0 : thread.kind === filter)) &&
+    (!search || [thread.title, thread.projectName, thread.clientName, thread.senderName, thread.preview].filter(Boolean).join(' ').toLowerCase().includes(search)));
+}

@@ -1,4 +1,5 @@
-import sanitizeHtml from 'sanitize-html';
+import { sanitizeTaskDescription } from './rich-text';
+export { sanitizeTaskDescription } from './rich-text';
 import { cache } from 'react';
 import { demoActivity, demoClient, demoNotifications, demoProjectMessages, demoProjects, demoTaskMessages, demoTasks, demoTemplates } from './demo-data';
 import { isDemoMode } from './env';
@@ -6,17 +7,6 @@ import { createSupabaseServerClient } from './supabase/server';
 import { getViewer } from './auth';
 import { orderClientProjects } from './project-order';
 import type { ActivityEvent, AdminConversationSummary, ClientSummary, ClientTaskSummary, ConversationMessage, ConversationThread, FeedbackState, FeedbackSubmission, FormField, NotificationRecord, ProjectSummary, TaskRecord, TemplateSummary, TemplateTaskRecord, Viewer } from './types';
-
-const safeRichTextOptions: sanitizeHtml.IOptions = {
-  allowedTags: ['p', 'br', 'h2', 'h3', 'strong', 'em', 'ul', 'ol', 'li', 'a'],
-  allowedAttributes: { a: ['href', 'target', 'rel'] },
-  allowedSchemes: ['http', 'https', 'mailto', 'tel'],
-  transformTags: { a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer', target: '_blank' }) },
-};
-
-export function sanitizeTaskDescription(value: string) {
-  return sanitizeHtml(value, safeRichTextOptions);
-}
 
 function feedbackState(value: unknown, enabled: boolean): FeedbackState {
   return value === 'pending' || value === 'waiting' || value === 'requested' || value === 'submitted' || value === 'cancelled' || value === 'not_configured'

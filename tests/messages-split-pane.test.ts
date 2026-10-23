@@ -70,9 +70,9 @@ describe('shared split-pane Messages experience', () => {
     expect(inboxRoute).toContain("viewer.role === 'client'");
   });
 
-  it('offers task context and Open lead for both roles', () => {
+  it('offers task context and Open task for both roles', () => {
     expect(workspace).toContain('Task conversation');
-    expect(workspace).toContain('Open lead');
+    expect(workspace).toContain('Open task');
     expect(workspace).toContain("`/admin/projects/${selected.projectId}/tasks/${selected.resourceId}`");
     expect(workspace).toContain("`/portal/tasks/${selected.resourceId}`");
   });

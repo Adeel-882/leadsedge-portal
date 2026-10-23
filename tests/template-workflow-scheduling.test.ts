@@ -196,9 +196,9 @@ describe('client exposure is unchanged', () => {
     expect(taskList).toContain(".is('archived_at', null)");
   });
 
-  it('imports as a draft by default so nothing reaches the client unreviewed', () => {
+  it('submits active from the simplified UI while retaining the database draft fallback', () => {
     expect(workflow).toContain("initial_task_status public.task_status default 'draft'");
-    expect(tasksClient).toContain("useState<'draft' | 'active'>('draft')");
+    expect(tasksClient).toContain("initialStatus: 'active'");
   });
 
   it('lets only the assigned client complete a lead, which is what starts the clock', () => {

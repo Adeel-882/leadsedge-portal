@@ -5,12 +5,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCacheIdentity } from './query-provider';
 import { queryKeys } from '@/lib/query-cache';
 import type { ScreenData } from '@/lib/screen-data';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowSquareOut, MagnifyingGlass, Plus, X } from '@phosphor-icons/react';
 import { Conversation } from '@/components/conversation';
 import { EmptyState } from '@/components/empty-state';
 import { formatTime, initials } from '@/lib/format';
-import { filterProjectChatOptions, projectChatSelection, resolveMessageThread } from '@/lib/message-workspace';
+import { filterMessageThreads, type MessageFilter, filterProjectChatOptions, projectChatSelection, resolveMessageThread } from '@/lib/message-workspace';
 import type { ConversationMessage, MessageWorkspaceThread, ProjectSummary } from '@/lib/types';
 
 type MessagesWorkspaceProps = {
@@ -27,10 +27,6 @@ function threadHref(role: 'admin' | 'client', key: string) {
   return `/${role === 'admin' ? 'admin' : 'portal'}/messages?thread=${encodeURIComponent(key)}`;
 }
 
-function threadSearchText(thread: MessageWorkspaceThread) {
-  return [thread.title, thread.projectName, thread.clientName, thread.senderName, thread.preview, thread.kind].filter(Boolean).join(' ').toLowerCase();
-}
-
 function ThreadRow({ thread, selected, onSelect }: { thread: MessageWorkspaceThread; selected: boolean; onSelect: () => void }) {
   const avatarLabel = thread.clientName || thread.title;
   return <button
@@ -42,12 +38,12 @@ function ThreadRow({ thread, selected, onSelect }: { thread: MessageWorkspaceThr
     <span className="avatar messages-thread-avatar">{initials(avatarLabel)}</span>
     <span className="messages-thread-copy">
       <span className="messages-thread-heading">
-        <span className="truncate">{thread.title}</span>
+        <span className="truncate">{thread.clientName || thread.title}</span>
         {thread.lastMessageAt && <time>{formatTime(thread.lastMessageAt)}</time>}
       </span>
       <span className="messages-thread-context">
         <span className="messages-type-badge">{thread.kind === 'task' ? 'Task' : 'Project'}</span>
-        <span className="truncate">{thread.kind === 'task' ? thread.projectName : thread.clientName || 'Project conversation'}</span>
+        <span className="truncate">{thread.kind === 'task' ? `${thread.title} · ${thread.projectName}` : thread.projectName}</span>
       </span>
       <span className="messages-thread-preview">
         <span className="truncate">{thread.preview ? `${thread.senderName ? `${thread.senderName}: ` : ''}${thread.preview}` : 'No messages yet'}</span>
@@ -58,6 +54,34 @@ function ThreadRow({ thread, selected, onSelect }: { thread: MessageWorkspaceThr
 }
 
 export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelectedKey, initialMessages, initialMobileConversation, projects = [] }: MessagesWorkspaceProps) {
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const page = workspaceRef.current?.closest<HTMLElement>('.messages-page');
+    if (!page) return;
+    // Account for variable-height connection/configuration banners and the mobile keyboard.
+    const fit = () => {
+      const viewport = window.visualViewport;
+      const bottom = (viewport?.height ?? window.innerHeight) + (viewport?.offsetTop ?? 0);
+      const nav = document.querySelector(role === 'admin' ? '.mobile-admin-nav' : '.portal-mobile-nav');
+      const navTop = nav && nav.getBoundingClientRect().height > 0 ? nav.getBoundingClientRect().top : bottom;
+      const height = Math.max(0, Math.min(bottom, navTop) - page.getBoundingClientRect().top);
+      page.style.setProperty('--messages-available-height', `${height}px`);
+    };
+    const observer = new ResizeObserver(fit);
+    for (let ancestor: HTMLElement | null = page.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      observer.observe(ancestor);
+      for (const child of ancestor.children) if (child !== page) observer.observe(child);
+    }
+    fit();
+    window.addEventListener('resize', fit);
+    window.visualViewport?.addEventListener('resize', fit);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', fit);
+      window.visualViewport?.removeEventListener('resize', fit);
+      page.style.removeProperty('--messages-available-height');
+    };
+  }, [role]);
   const client = useQueryClient();
   const identity = useCacheIdentity();
   const threads = initialThreads;
@@ -66,6 +90,7 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
   }, [client,identity]);
   const [selectedKey, setSelectedKey] = useState(initialSelectedKey);
   const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<MessageFilter>('all');
   const [loadError, setLoadError] = useState('');
   const [mobileConversation, setMobileConversation] = useState(initialMobileConversation);
   const [projectPicker, setProjectPicker] = useState(false);
@@ -74,10 +99,7 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
   const [desktop, setDesktop] = useState(false);
 
   const selected = threads.find((thread) => thread.key === selectedKey) || resolveMessageThread(threads, null);
-  const filteredThreads = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return normalized ? threads.filter((thread) => threadSearchText(thread).includes(normalized)) : threads;
-  }, [query, threads]);
+  const filteredThreads = useMemo(() => filterMessageThreads(threads, query, filter), [query, filter, threads]);
 
   useEffect(() => {
     const media = window.matchMedia('(min-width: 768px)');
@@ -112,6 +134,7 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
     if (!thread) return;
     setThreads((current) => current.some(item => item.key === thread.key) ? current : [...current, thread]);
     setQuery('');
+    setFilter('all');
     setProjectPicker(false);
     void selectThread(thread);
   }
@@ -131,20 +154,21 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
     } : thread));
   }, [selectedKey, setThreads]);
 
-  return <div className={`messages-workspace ${mobileConversation ? 'mobile-conversation-open' : ''}`}>
+  return <div ref={workspaceRef} className={`messages-workspace ${mobileConversation ? 'mobile-conversation-open' : ''}`}>
     <aside className="messages-rail" aria-label="Conversation list">
       <header className="messages-rail-header">
         <div>
-          <p className="text-sm font-bold">Conversations</p>
+          <h1 className="messages-center-title">Message Center</h1>
           <p className="text-xs text-muted">{threads.length} {threads.length === 1 ? 'thread' : 'threads'}</p>
         </div>
-        {role === 'admin' && <button type="button" className="icon-button" aria-label="Start or open project chat" onClick={() => { setProjectQuery(''); setProjectPicker(true); }}><Plus size={18} weight="bold" aria-hidden /></button>}
+        {role === 'admin' && <button type="button" className="button-secondary messages-new-chat" aria-label="Start or open project chat" onClick={() => { setProjectQuery(''); setProjectPicker(true); }}><Plus size={16} weight="bold" aria-hidden /><span>Project Chat</span></button>}
       </header>
       <label className="messages-search">
         <MagnifyingGlass size={16} aria-hidden />
         <span className="sr-only">Search conversations</span>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations" />
       </label>
+      <div className="messages-filters" role="group" aria-label="Filter conversations">{([['all', 'All'], ['unread', 'Unread'], ['project', 'Project Chats'], ['task', 'Task Chats']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div>
       <div className="messages-thread-list">
         {filteredThreads.map((thread) => <ThreadRow key={thread.key} thread={thread} selected={thread.key === selected?.key} onSelect={() => void selectThread(thread)} />)}
         {!filteredThreads.length && <p className="px-4 py-8 text-center text-sm text-muted">{threads.length ? 'No conversations match your search.' : 'No conversations yet.'}</p>}
@@ -160,7 +184,8 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
             <h2 className="truncate text-sm font-bold sm:text-base">{selected.title}</h2>
             <p className="truncate text-xs text-muted">{selected.clientName ? `${selected.clientName} · ` : ''}{selected.kind === 'task' ? `${selected.projectName} · Task conversation` : 'Project conversation'}</p>
           </div>
-          {selected.kind === 'task' && <Link prefetch={false} className="button-ghost messages-open-lead" href={role === 'admin' ? `/admin/projects/${selected.projectId}/tasks/${selected.resourceId}` : `/portal/tasks/${selected.resourceId}`}><span>Open lead</span><ArrowSquareOut size={14} aria-hidden /></Link>}
+          {selected.kind === 'task' && <Link prefetch={false} className="button-ghost messages-open-lead" href={role === 'admin' ? `/admin/projects/${selected.projectId}/tasks/${selected.resourceId}` : `/portal/tasks/${selected.resourceId}`}><span>Open task</span><ArrowSquareOut size={14} aria-hidden /></Link>}
+        {selected.kind === 'project' && role === 'admin' && <Link prefetch={false} className="button-secondary messages-open-lead" href={`/admin/projects/${selected.projectId}`}>Open project<ArrowSquareOut size={14} aria-hidden /></Link>}
         </header>
         <div className="messages-pane-body">
           {loadError && <p role="alert" className="p-2 text-sm">{loadError}</p>}{desktop || mobileConversation ? <Conversation key={selected.key} kind={selected.kind} resourceId={selected.resourceId} viewerId={viewerId} initialMessages={selected.key === initialSelectedKey ? initialMessages : undefined} onConversationRead={conversationRead} onMessageSent={messageSent} /> : null}
