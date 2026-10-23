@@ -27,6 +27,7 @@ export function TasksClient({ projectId, tasks, clients, templates, templateTask
   const [assigneeId, setAssigneeId] = useState(clients[0]?.id || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [importWarning, setImportWarning] = useState('');
 
   const visible = useMemo(() => tasks.filter((task) => task.title.toLowerCase().includes(query.toLowerCase()) && (status === 'all' || task.status === status)), [tasks, query, status]);
   const progress = tasks.length ? Math.round(tasks.filter((task) => task.status === 'completed').length / tasks.length * 100) : 0;
@@ -36,9 +37,9 @@ export function TasksClient({ projectId, tasks, clients, templates, templateTask
 
   async function importTasks() {
     setSaving(true); setError('');
-    const response = await fetch('/api/admin/tasks/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, templateId: selectedTemplate, templateTaskIds: selectedTaskIds, initialStatus: 'active' }) });
-    const result = await response.json() as { error?: string };
-    if (!response.ok) setError(result.error || 'Unable to import tasks.'); else { setShowImport(false); await invalidate('task'); router.refresh(); }
+    const response = await fetch('/api/admin/tasks/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, templateId: selectedTemplate, templateTaskIds: selectedTaskIds, initialStatus: 'draft' }) });
+    const result = await response.json() as { error?: string; warning?: string };
+    if (!response.ok) setError(result.error || 'Unable to import tasks.'); else { setImportWarning(result.warning || ''); setShowImport(false); await invalidate('task'); router.refresh(); }
     setSaving(false);
   }
 
@@ -51,6 +52,7 @@ export function TasksClient({ projectId, tasks, clients, templates, templateTask
   }
 
   return <div className="page-wrap">
+    {importWarning && <p role="alert" className="mb-4 rounded-lg bg-warning-soft p-4 text-warning">{importWarning}</p>}
     <div className="page-header page-header-row"><div><p className="page-eyebrow">Delivery workflow</p><h2 className="page-title">Tasks</h2><p className="page-subtitle">Draft privately, activate when ready, and keep each lead conversation isolated.</p></div><div className="flex flex-wrap gap-2"><button className="button-secondary" onClick={() => setShowImport(true)}><DownloadSimple size={16} aria-hidden />Import template</button><button className="button-primary" onClick={() => setShowAdd(true)}><Plus size={16} weight="bold" aria-hidden />Add task</button></div></div>
     <div className="surface-flat mb-4 flex flex-col gap-4 p-4 sm:flex-row sm:items-center"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-soft text-brand-text"><CheckSquare size={19} weight="fill" aria-hidden /></span><div><p className="text-xs font-semibold text-muted">Overall progress</p><p className="text-lg font-bold tabular-nums">{progress}%</p></div></div><div className="flex-1"><div className="h-1.5 overflow-hidden rounded-full bg-track"><span className="block h-full rounded-full bg-brand transition-all" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-xs text-muted">{tasks.filter((task) => task.status === 'completed').length} of {tasks.length} completed</p></div></div>
     <section className="surface-flat overflow-hidden"><div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:justify-between"><label className="flex h-10 items-center gap-2 rounded-lg border border-line px-3 sm:w-80"><MagnifyingGlass size={16} className="text-muted" aria-hidden /><span className="sr-only">Search tasks</span><input className="w-full bg-transparent text-[13px] outline-none" placeholder="Search tasks" value={query} onChange={(event) => setQuery(event.target.value)} /></label><select className="field-select sm:w-44" value={status} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="all">All statuses</option><option value="draft">Draft</option><option value="active">Active</option><option value="completed">Completed</option></select></div>

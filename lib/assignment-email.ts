@@ -1,3 +1,4 @@
+import { hasMeaningfulLeadDetails } from './lead-details-copy';
 import { createSupabaseAdminClient } from './supabase/admin';
 import { sendBrandedEmail } from './email';
 import { appUrl } from './env';
@@ -8,11 +9,11 @@ const one = <T>(value: T | T[] | null) => Array.isArray(value) ? value[0] : valu
 // Re-read current assignment; request payloads and old outbox recipients are not authority.
 async function recipient(admin: Admin, taskId: string) {
   const { data: task, error } = await admin.from('project_tasks')
-    .select('id,project_id,title,assignee_id,template:template_tasks!inner(template:templates!inner(name))')
+    .select('id,project_id,title,description,assignee_id,template:template_tasks!inner(template:templates!inner(name))')
     .eq('id', taskId).eq('status', 'active').eq('requires_completion', true)
     .eq('client_visible', true).is('archived_at', null).maybeSingle();
   if (error) throw new Error('assignment_lookup_failed');
-  if (!task || one(one(task.template)?.template)?.name !== 'Lead Assignment' || !task.assignee_id) return null;
+  if (!task || one(one(task.template)?.template)?.name !== 'Lead Assignment' || !task.assignee_id || !hasMeaningfulLeadDetails(task.description || '')) return null;
   const [{ data: client, error: clientError }, { data: membership, error: memberError }] = await Promise.all([
     admin.from('clients').select('id,auth_user_id,email,full_name').eq('id', task.assignee_id).neq('status', 'disabled').maybeSingle(),
     admin.from('project_clients').select('client_id').eq('project_id', task.project_id).eq('client_id', task.assignee_id).maybeSingle(),
@@ -54,8 +55,8 @@ export async function queueAssignmentEmails(taskIds: string[]) {
       if (error) throw new Error('outbox_enqueue_failed');
       queued.push(...(data || []).map(row => row.id));
       // The outbox event ID also makes the matching Bell event idempotent.
-      // Imports have no database notification trigger; editor activation already
-      // emitted this notification historically, so its old event is retained.
+      // Imported leads use this deduplicated event on activation. Retain any
+      // historical activation notification instead of creating a second one.
       if (data?.[0]) {
         const { data: notifications, error: notificationError } = await admin.from('notifications').select('id')
           .eq('task_id', task.id).eq('user_id', client.auth_user_id).eq('type', 'task.activated').limit(1);

@@ -198,7 +198,7 @@ describe('client exposure is unchanged', () => {
 
   it('submits active from the simplified UI while retaining the database draft fallback', () => {
     expect(workflow).toContain("initial_task_status public.task_status default 'draft'");
-    expect(tasksClient).toContain("initialStatus: 'active'");
+    expect(tasksClient).toContain("initialStatus: 'draft'");
   });
 
   it('lets only the assigned client complete a lead, which is what starts the clock', () => {

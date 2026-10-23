@@ -33,7 +33,7 @@ beforeEach(() => {
   vi.clearAllMocks(); process.env.NEXT_PUBLIC_APP_URL = 'http://127.0.0.1:3000';
   state.send.mockResolvedValue({ ok: true, id: 'provider-id' });
   state.tables = {
-    project_tasks: [{ id: 'task-1', project_id: 'project-1', title: 'Lead Assignment', assignee_id: 'client-1', status: 'active', requires_completion: true, client_visible: true, archived_at: null, template: { template: { name: 'Lead Assignment' } } }],
+    project_tasks: [{ id: 'task-1', project_id: 'project-1', title: 'Lead Assignment', description: '<p>Jane Example: buyer in Austin. Call Tuesday.</p>', assignee_id: 'client-1', status: 'active', requires_completion: true, client_visible: true, archived_at: null, template: { template: { name: 'Lead Assignment' } } }],
     clients: [{ id: 'client-1', auth_user_id: 'user-1', email: 'client@example.com', full_name: 'Client', status: 'active' }],
     users: [{ id: 'user-1', role: 'client', email: 'client@example.com' }], project_clients: [{ project_id: 'project-1', client_id: 'client-1' }], email_outbox: [], notifications: [],
   };
@@ -48,7 +48,7 @@ it('queues and delivers an imported lead only once across saves and concurrent d
   expect(state.send.mock.calls[0][0]).toMatchObject({ to: 'client@example.com', actionLabel: 'View Lead', idempotencyKey: 'assignment/outbox-1' });
   expect(state.tables.email_outbox[0].status).toBe('sent');
 });
-it.each([{ status: 'completed' }, { status: 'draft' }, { client_visible: false }, { requires_completion: false }, { archived_at: '2026-01-01' }, { template: null }, { template: { template: { name: 'Other workflow' } } }])('does not email unavailable or non-Lead-Assignment tasks: %j', async patch => {
+it.each([{ description: '' }, { description: '<p>Lead Detail</p>' }, { status: 'completed' }, { status: 'draft' }, { client_visible: false }, { requires_completion: false }, { archived_at: '2026-01-01' }, { template: null }, { template: { template: { name: 'Other workflow' } } }])('does not email unavailable or non-Lead-Assignment tasks: %j', async patch => {
   Object.assign(state.tables.project_tasks[0], patch);
   expect(await queueAssignmentEmails(['task-1'])).toEqual([]);
   expect(state.send).not.toHaveBeenCalled();

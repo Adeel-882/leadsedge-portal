@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { sanitizeTaskDescription } from '@/lib/rich-text';
-import { leadDetailsEditorValue } from '@/lib/lead-details-copy';
+import { leadDetailsEditorValue, initialLeadDetails } from '@/lib/lead-details-copy';
 import { filterMessageThreads, emptyAdminProjectThread } from '@/lib/message-workspace';
 import { demoProjects } from '@/lib/demo-data';
 import { readFileSync } from 'node:fs';
@@ -19,8 +19,8 @@ describe('lead rich text persistence', () => {
     expect(sanitizeTaskDescription(text)).toBe(text);
     expect(leadDetailsEditorValue(text)).toBe(text);
   });
-  it('starts an untouched stock instruction in a normal paragraph, without changing custom content', () => {
-    expect(leadDetailsEditorValue('<h2>Lead details</h2><p>Add the lead information here before activating this task.</p>')).toBe('<p><br></p>');
+  it('initializes new stock lead instructions without changing custom content', () => {
+    expect(initialLeadDetails('<h2>Lead details</h2><p>Add the lead information here before activating this task.</p>')).toBe('<p>Lead Detail</p>');
   });
   it('removes scripts, event handlers, embedded resources, styles and unsafe links', () => {
     const clean=sanitizeTaskDescription('<script>alert(1)</script><img src=x onerror=alert(1)><p onclick="alert(1)">Safe</p><a href="javascript:alert(1)">bad</a><span style="background:url(javascript:alert(1))">text</span>');
@@ -47,9 +47,9 @@ describe('supported inbox filters', () => {
     expect(filterMessageThreads([],'','all')).toEqual([]);
   });
 });
-it('removes the imported status control and explicitly submits active without changing task creation defaults', () => {
+it('removes the imported status control and explicitly submits draft without changing task creation defaults', () => {
   const source=readFileSync('components/admin/tasks-client.tsx','utf8');
   expect(source).not.toContain('Imported status');expect(source).not.toContain('setInitialStatus');
-  expect(source).toContain("templateTaskIds: selectedTaskIds, initialStatus: 'active'");
+  expect(source).toContain("templateTaskIds: selectedTaskIds, initialStatus: 'draft'");
   expect(source).toContain("status: 'draft'");
 });
