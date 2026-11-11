@@ -129,6 +129,10 @@ export type TemplateTaskRecord = {
 };
 
 export type ConversationMessage = {
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  version?: number;
+  messageType?: string;
   id: string;
   senderId: string;
   senderName: string;

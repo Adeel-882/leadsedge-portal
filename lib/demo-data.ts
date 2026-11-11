@@ -27,13 +27,13 @@ export const demoTemplates: TemplateSummary[] = [
 ];
 
 export const demoTaskMessages: ConversationMessage[] = [
-  { id: '00000000-0000-4000-8000-000000000400', senderId: demoAdmin.id, senderName: 'Admin', senderRole: 'admin', body: 'Hi Adeel — the lead details are ready. Let me know if you need anything before reaching out.', attachmentUrl: null, createdAt: '2026-08-26T09:10:00.000Z' },
-  { id: '00000000-0000-4000-8000-000000000401', senderId: demoClientViewer.id, senderName: 'Adeel Ahmed', senderRole: 'client', body: 'Thanks, I have it. I’ll make contact this afternoon.', attachmentUrl: null, createdAt: '2026-08-26T09:22:00.000Z' },
+  { id: '00000000-0000-4000-8000-000000000400', senderId: demoAdmin.id, senderName: 'Admin', senderRole: 'admin', messageType: 'user', version: 0, body: 'Hi Adeel — the lead details are ready. Let me know if you need anything before reaching out.', attachmentUrl: null, createdAt: '2026-08-26T09:10:00.000Z' },
+  { id: '00000000-0000-4000-8000-000000000401', senderId: demoClientViewer.id, senderName: 'Adeel Ahmed', senderRole: 'client', messageType: 'user', version: 0, body: 'Thanks, I have it. I’ll make contact this afternoon.', attachmentUrl: null, createdAt: '2026-08-26T09:22:00.000Z' },
 ];
 
 export const demoProjectMessages: ConversationMessage[] = [
-  { id: '00000000-0000-4000-8000-000000000410', senderId: demoAdmin.id, senderName: 'Admin', senderRole: 'admin', body: 'Welcome to Leadsedge Portal. This chat is for general project updates.', attachmentUrl: null, createdAt: '2026-08-25T11:00:00.000Z' },
-  { id: '00000000-0000-4000-8000-000000000411', senderId: demoClientViewer.id, senderName: 'Adeel Ahmed', senderRole: 'client', body: 'Thanks — everything looks clear.', attachmentUrl: null, createdAt: '2026-08-25T11:08:00.000Z' },
+  { id: '00000000-0000-4000-8000-000000000410', senderId: demoAdmin.id, senderName: 'Admin', senderRole: 'admin', messageType: 'user', version: 0, body: 'Welcome to Leadsedge Portal. This chat is for general project updates.', attachmentUrl: null, createdAt: '2026-08-25T11:00:00.000Z' },
+  { id: '00000000-0000-4000-8000-000000000411', senderId: demoClientViewer.id, senderName: 'Adeel Ahmed', senderRole: 'client', messageType: 'user', version: 0, body: 'Thanks — everything looks clear.', attachmentUrl: null, createdAt: '2026-08-25T11:08:00.000Z' },
 ];
 
 export const demoActivity: ActivityEvent[] = [

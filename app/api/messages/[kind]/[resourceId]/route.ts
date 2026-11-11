@@ -41,11 +41,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
   const { data: thread, error: threadError } = await supabase!.from(threadTable).select('id').eq(resourceField, resourceId).single();
   if (threadError || !thread) return NextResponse.json({ error: 'Conversation is unavailable.' }, { status: 404 });
   const insertResult = kind === 'task'
-    ? await supabase!.from('task_messages').insert({ task_id: resourceId, thread_id: thread.id, sender_id: viewer.id, message_type: 'user', body: parsed.data.body, attachment_url: parsed.data.attachmentUrl || null }).select('id,created_at').single()
-    : await supabase!.from('project_messages').insert({ project_id: resourceId, thread_id: thread.id, sender_id: viewer.id, message_type: 'user', body: parsed.data.body, attachment_url: parsed.data.attachmentUrl || null }).select('id,created_at').single();
+    ? await supabase!.from('task_messages').insert({ task_id: resourceId, thread_id: thread.id, sender_id: viewer.id, message_type: 'user', body: parsed.data.body, attachment_url: parsed.data.attachmentUrl || null }).select('id,created_at,message_version,message_type,edited_at,deleted_at').single()
+    : await supabase!.from('project_messages').insert({ project_id: resourceId, thread_id: thread.id, sender_id: viewer.id, message_type: 'user', body: parsed.data.body, attachment_url: parsed.data.attachmentUrl || null }).select('id,created_at,message_version,message_type,edited_at,deleted_at').single();
   const { data: saved, error } = insertResult;
   if (error || !saved) return NextResponse.json({ error: 'Message could not be sent.' }, { status: 500 });
-  return NextResponse.json({ message: { id: saved.id, senderId: viewer.id, senderName: viewer.fullName, senderRole: viewer.role, body: parsed.data.body, attachmentUrl: parsed.data.attachmentUrl || null, createdAt: saved.created_at } }, { status: 201 });
+  return NextResponse.json({ message: { id: saved.id, senderId: viewer.id, senderName: viewer.fullName, senderRole: viewer.role, body: parsed.data.body, attachmentUrl: parsed.data.attachmentUrl || null, createdAt: saved.created_at, version: saved.message_version, messageType: saved.message_type, editedAt: saved.edited_at, deletedAt: saved.deleted_at } }, { status: 201 });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ kind: string; resourceId: string }> }) {

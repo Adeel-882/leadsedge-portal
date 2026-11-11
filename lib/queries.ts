@@ -206,10 +206,10 @@ const MESSAGE_PAGE_SIZE = 50;
 // Unread counts never come from this sample; they come from read receipts.
 const CONVERSATION_ACTIVITY_SAMPLE = 400;
 
-function mapMessages(rows: Array<{ id: string; sender_id: string; body: string; attachment_url: string | null; created_at: string; sender: { full_name: string; role: string } | { full_name: string; role: string }[] | null }>): ConversationMessage[] {
+function mapMessages(rows: Array<{ edited_at?: string | null; deleted_at?: string | null; message_version?: number; message_type?: string; id: string; sender_id: string; body: string; attachment_url: string | null; created_at: string; sender: { full_name: string; role: string } | { full_name: string; role: string }[] | null }>): ConversationMessage[] {
   return rows.map((row) => {
     const sender = Array.isArray(row.sender) ? row.sender[0] : row.sender;
-    return { id: row.id, senderId: row.sender_id, senderName: sender?.full_name || 'Member', senderRole: sender?.role === 'admin' ? 'admin' : 'client', body: row.body, attachmentUrl: row.attachment_url, createdAt: row.created_at };
+    return { id: row.id, senderId: row.sender_id, senderName: sender?.full_name || 'Member', senderRole: sender?.role === 'admin' ? 'admin' : 'client', body: row.deleted_at ? 'This message was deleted.' : row.body, attachmentUrl: row.deleted_at ? null : row.attachment_url, createdAt: row.created_at, editedAt: row.edited_at, deletedAt: row.deleted_at, version: row.message_version, messageType: row.message_type };
   });
 }
 
@@ -217,7 +217,7 @@ export async function getTaskMessages(taskId: string, before?: string): Promise<
   if (isDemoMode()) return demoTaskMessages;
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
-  let query = supabase.from('task_messages').select('id,sender_id,body,attachment_url,created_at,sender:users(full_name,role)').eq('task_id', taskId).eq('message_type', 'user').order('created_at', { ascending: false }).limit(MESSAGE_PAGE_SIZE);
+  let query = supabase.from('task_messages').select('id,sender_id,body,attachment_url,created_at,edited_at,deleted_at,message_version,message_type,sender:users(full_name,role)').eq('task_id', taskId).eq('message_type', 'user').order('created_at', { ascending: false }).limit(MESSAGE_PAGE_SIZE);
   if (before) query = query.lt('created_at', before);
   const { data, error } = await query;
   if (error) throw new Error('Unable to load task conversation.');
@@ -228,7 +228,7 @@ export async function getProjectMessages(projectId: string, before?: string): Pr
   if (isDemoMode()) return demoProjectMessages;
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
-  let query = supabase.from('project_messages').select('id,sender_id,body,attachment_url,created_at,sender:users(full_name,role)').eq('project_id', projectId).eq('message_type', 'user').order('created_at', { ascending: false }).limit(MESSAGE_PAGE_SIZE);
+  let query = supabase.from('project_messages').select('id,sender_id,body,attachment_url,created_at,edited_at,deleted_at,message_version,message_type,sender:users(full_name,role)').eq('project_id', projectId).eq('message_type', 'user').order('created_at', { ascending: false }).limit(MESSAGE_PAGE_SIZE);
   if (before) query = query.lt('created_at', before);
   const { data, error } = await query;
   if (error) throw new Error('Unable to load project conversation.');

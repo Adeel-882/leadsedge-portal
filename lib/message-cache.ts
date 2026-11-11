@@ -1,9 +1,12 @@
+import { newestMessage } from './message-edit';
 import type { ConversationMessage } from './types';
 export type MessagePage = { messages: ConversationMessage[]; hasMore: boolean; gap?: {before:string;until:string} };
 export type MessagePages = { pages: MessagePage[]; pageParams: unknown[] };
 export const MAX_MESSAGE_PAGES = 10;
 export function appendMessage(data: MessagePages | undefined, message: ConversationMessage): MessagePages {
   const current = data || { pages: [{ messages: [], hasMore: false }], pageParams: [null] };
+  const previous = flattenMessages(current).find(item => item.id === message.id);
+  if (previous) message = newestMessage(previous, message);
   const all = [...flattenMessages(current).filter(item => item.id !== message.id), message].sort((a,b) => a.createdAt.localeCompare(b.createdAt));
   const bounded = all.slice(-50 * MAX_MESSAGE_PAGES);
   const pages: MessagePage[] = [];
@@ -41,4 +44,13 @@ export function flattenMessages(data?: MessagePages) {
   const unique = new Map<string, ConversationMessage>();
   for (const page of [...(data?.pages || [])].reverse()) for(const message of page.messages) unique.set(message.id,message);
   return [...unique.values()];
+}
+
+// Merge revision-aware rows even when an older in-flight query finishes later.
+export function reconcileMessagePages(old: MessagePages | undefined, next: MessagePages): MessagePages {
+  const known = new Map(flattenMessages(old).map(message => [message.id, message]));
+  return {...next, pages: next.pages.map(page => ({...page, messages: page.messages.map(message => known.has(message.id) ? newestMessage(known.get(message.id)!, message) : message)}))};
+}
+export function updateMessage(data: MessagePages | undefined, message: ConversationMessage) {
+  return data && {...data, pages: data.pages.map(page => ({...page, messages: page.messages.map(item => item.id === message.id ? newestMessage(item, message) : item)}))};
 }

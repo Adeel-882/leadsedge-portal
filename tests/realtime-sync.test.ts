@@ -30,11 +30,13 @@ function transport(viewerId=identity.id) {
 beforeEach(()=>{vi.useFakeTimers();client=makeQueryClient();sync=new RealtimeSync(client,identity);});
 afterEach(()=>{sync.stop();client.clear();vi.useRealTimers();});
 
-it('owns one channel with eight explicitly bounded registrations and no DELETE',async()=>{
+it('owns one channel with ten explicitly bounded registrations and no DELETE',async()=>{
  const t=transport();await sync.start(t.client);await sync.start(t.client);
- expect(t.value.channel).toHaveBeenCalledTimes(1);expect(t.callbacks).toHaveLength(8);
+ expect(t.value.channel).toHaveBeenCalledTimes(1);expect(t.callbacks).toHaveLength(10);
  expect(t.callbacks.filter(x=>x.config.table==='project_tasks').map(x=>x.config.event)).toEqual(['INSERT','UPDATE']);
  expect(t.callbacks.some(x=>['*','DELETE'].includes(x.config.event))).toBe(false);
+ expect(t.callbacks.filter(x=>x.config.table==='project_messages').map(x=>x.config.event)).toEqual(['INSERT','UPDATE']);
+ expect(t.callbacks.filter(x=>x.config.table==='task_messages').map(x=>x.config.event)).toEqual(['INSERT','UPDATE']);
  expect(t.callbacks.filter(x=>x.config.table==='message_read_receipts').every(x=>x.config.filter===`recipient_id=eq.${identity.id}`)).toBe(true);
 });
 it('thread switching registers callbacks without creating channels',async()=>{

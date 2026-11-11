@@ -1,7 +1,8 @@
+import { DELETED_MESSAGE } from './message-edit';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { freshness, queryKeys, type CacheIdentity } from './query-cache';
-import { appendMessage, flattenMessages, type MessagePages } from './message-cache';
+import { appendMessage, updateMessage, flattenMessages, type MessagePages } from './message-cache';
 import type { ConversationMessage, MessageWorkspaceThread, ProjectSummary, ClientTaskSummary } from './types';
 
 type Row = Record<string, unknown>;
@@ -30,6 +31,7 @@ export class RealtimeSync {
   private pendingSends = new Map<string, Set<string>>();
   private deferredOwnMessages = new Map<string, ConversationMessage[]>();
   private seen = new Set<string>();
+  private revisions = new Map<string, ConversationMessage>();
   private visible: () => boolean;
 
   constructor(readonly client: QueryClient, readonly identity: CacheIdentity, visible = () => true) { this.visible = visible; }
@@ -60,6 +62,8 @@ export class RealtimeSync {
     };
     listen('project_messages', 'INSERT');
     listen('task_messages', 'INSERT');
+    listen('project_messages', 'UPDATE');
+    listen('task_messages', 'UPDATE');
     for (const event of ['INSERT', 'UPDATE'] as const) {
       if (this.identity.role === 'admin' && this.identity.inboxRemoval) listen('message_inbox_visibility', event, `user_id=eq.${this.identity.id}`);
       listen('message_read_receipts', event, `recipient_id=eq.${this.identity.id}`);
@@ -77,7 +81,7 @@ export class RealtimeSync {
     this.alive = false; ++this.generation;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined; this.pending.clear(); this.readQueue.clear(); this.newestQueue.clear();
-    this.pendingSends.clear(); this.deferredOwnMessages.clear(); this.seen.clear(); this.open.clear();
+    this.pendingSends.clear(); this.deferredOwnMessages.clear(); this.seen.clear(); this.revisions.clear(); this.open.clear();
     const channel = this.channel; this.channel = undefined;
     if (channel && this.transport) channelRemoval = this.transport.removeChannel(channel).catch(() => undefined);
     this.setStatus('stopped');
@@ -85,7 +89,7 @@ export class RealtimeSync {
 
   register(kind: string, id: string, callbacks: OpenConversation) {
     const key = `${kind}:${id}`; this.open.set(key, callbacks);
-    if (Date.now() - (this.client.getQueryState(queryKeys.messages(this.identity,kind,id))?.dataUpdatedAt || 0) > freshness('messages').staleTime) this.newestQueue.add(key);
+    if (this.client.getQueryState(queryKeys.messages(this.identity,kind,id))?.isInvalidated || Date.now() - (this.client.getQueryState(queryKeys.messages(this.identity,kind,id))?.dataUpdatedAt || 0) > freshness('messages').staleTime) this.newestQueue.add(key);
     this.requestRead(key);
     return () => { if (this.open.get(key) === callbacks) this.open.delete(key); };
   }
@@ -138,6 +142,8 @@ export class RealtimeSync {
   reconcile() {
     if (!this.alive) return;
     this.communicationChanged();
+    // Inactive histories may have missed edits while disconnected. Refetch on return.
+    void this.client.invalidateQueries({queryKey:this.key('messages'),type:'inactive',refetchType:'none'});
     this.projectActivityChanged();
     for (const resource of ['tasks', 'home', 'dashboard']) this.enqueue(resource);
     for (const query of this.client.getQueryCache().findAll({ queryKey: this.key('task') })) {
@@ -156,7 +162,7 @@ export class RealtimeSync {
 
   private inventory() { return this.client.getQueryData<Inventory>(this.key('conversations')); }
   private knownMessageScope(kind: string, id: string) {
-    return Boolean(this.client.getQueryData(queryKeys.messages(this.identity, kind, id)) || this.inventory()?.threads.some(t => t.kind === kind && t.resourceId === id));
+    return Boolean(this.client.getQueryData(queryKeys.messages(this.identity, kind, id)) || (kind === 'task' && this.client.getQueryData(this.key('task',id))) || this.inventory()?.threads.some(t => t.kind === kind && t.resourceId === id));
   }
   private taskScope(row: Row) {
     const home = this.client.getQueryData<{projects:ProjectSummary[];allTasks:ClientTaskSummary[]}>(this.key('home'));
@@ -189,6 +195,19 @@ export class RealtimeSync {
       if (this.inventory()?.threads.some(t => t.kind === 'task' && t.resourceId === row.id)) this.enqueue('conversations');
       return;
     }
+    if (event === 'UPDATE' && ['project_messages','task_messages'].includes(table) && row.message_type === 'user') {
+      const kind = table === 'task_messages' ? 'task' : 'project';
+      const id = row[kind+'_id'];
+      if (!uuid(id) || !Number.isInteger(row.message_version) || Number(row.message_version)<1) return;
+      const previous = flattenMessages(this.client.getQueryData<MessagePages>(queryKeys.messages(this.identity,kind,id))).find(m=>m.id===row.id);
+      if (this.knownMessageScope(kind,id) && uuid(row.sender_id) && typeof row.created_at==='string' && typeof row.body==='string') {
+        this.messageChanged(kind,id,{id:row.id,senderId:row.sender_id,senderName:previous?.senderName || '',senderRole:previous?.senderRole || 'client',createdAt:row.created_at,body:typeof row.deleted_at==='string'?DELETED_MESSAGE:row.body,attachmentUrl:typeof row.deleted_at==='string'?null:typeof row.attachment_url==='string'?row.attachment_url:null,version:Number(row.message_version),messageType:'user',editedAt:typeof row.edited_at==='string'?row.edited_at:null,deletedAt:typeof row.deleted_at==='string'?row.deleted_at:null});
+      } else {
+        void this.client.cancelQueries({queryKey:this.key('conversations'),exact:true});
+        this.enqueue('conversations');
+      }
+      return; // Never treat UPDATE as incoming communication or mark receipts read.
+    }
     if (event !== 'INSERT' || !['project_messages','task_messages'].includes(table) || row.message_type !== 'user') return;
     const kind = table === 'task_messages' ? 'task' : 'project';
     const id = row[kind + '_id'];
@@ -204,13 +223,43 @@ export class RealtimeSync {
     }
     const history = this.client.getQueryData<MessagePages>(queryKeys.messages(this.identity,kind,id));
     const sender = flattenMessages(history).find(m => m.senderId === row.sender_id);
-    const message: ConversationMessage = {id:row.id,senderId:row.sender_id,senderName:row.sender_id===this.identity.id?'You':sender?.senderName || 'Member',senderRole:sender?.senderRole || (row.sender_id===this.identity.id?this.identity.role:'client'),body:row.body,attachmentUrl:typeof row.attachment_url==='string'?row.attachment_url:null,createdAt:row.created_at};
+    const message: ConversationMessage = {id:row.id,senderId:row.sender_id,senderName:row.sender_id===this.identity.id?'You':sender?.senderName || 'Member',senderRole:sender?.senderRole || (row.sender_id===this.identity.id?this.identity.role:'client'),body:row.body,version:typeof row.message_version==='number'?row.message_version:undefined,messageType:'user',editedAt:typeof row.edited_at==='string'?row.edited_at:null,deletedAt:typeof row.deleted_at==='string'?row.deleted_at:null,attachmentUrl:typeof row.attachment_url==='string'?row.attachment_url:null,createdAt:row.created_at};
     const resource = `${kind}:${id}`;
     if (row.sender_id === this.identity.id && this.pendingSends.get(resource)?.size) {
       this.deferredOwnMessages.set(resource,[...(this.deferredOwnMessages.get(resource)||[]),message]);
     } else this.applyMessage(kind,id,message);
     this.communicationChanged();
     if (this.open.has(resource)) this.requestRead(resource);
+  }
+
+  messageChanged(kind: string, id: string, message: ConversationMessage) {
+    if (!this.alive) return;
+    const key=queryKeys.messages(this.identity,kind,id);
+    const previous=flattenMessages(this.client.getQueryData<MessagePages>(key)).find(m=>m.id===message.id);
+    if (previous && (previous.senderId!==message.senderId || previous.createdAt!==message.createdAt || (previous.version ?? 0) > (message.version ?? 0) || (previous.deletedAt && !message.deletedAt))) return;
+    if (!this.rememberRevision(kind,id,message)) return;
+    void this.client.cancelQueries({queryKey:key,exact:true});
+    void this.client.cancelQueries({queryKey:this.key('conversations'),exact:true});
+    this.client.setQueryData<MessagePages>(key,current=>updateMessage(current,message));
+    this.client.setQueryData<Inventory>(this.key('conversations'),current=>current && {...current,threads:current.threads.map(t=>t.kind===kind && t.resourceId===id && t.lastMessageAt===message.createdAt?{...t,preview:message.deletedAt?DELETED_MESSAGE:message.body}:t)});
+    this.enqueue('conversations');
+  }
+
+  private rememberRevision(kind: string, id: string, message: ConversationMessage) {
+    const key=`${kind}:${id}:${message.id}`;
+    const previous=this.revisions.get(key);
+    if (previous && ((previous.version ?? 0) > (message.version ?? 0) || (previous.deletedAt && !message.deletedAt))) return false;
+    this.revisions.set(key,message);
+    if(this.revisions.size>1000) this.revisions.delete(this.revisions.keys().next().value!);
+    return true;
+  }
+
+  reconcileHistory(kind: string, id: string, data: MessagePages): MessagePages {
+    return {...data,pages:data.pages.map(page=>({...page,messages:page.messages.map(message=>{
+      const revision=this.revisions.get(`${kind}:${id}:${message.id}`);
+      return revision && revision.senderId===message.senderId && revision.createdAt===message.createdAt && ((revision.version ?? 0)>(message.version ?? 0) || (revision.deletedAt && !message.deletedAt))
+        ? {...revision,senderName:message.senderName,senderRole:message.senderRole}:message;
+    })}))};
   }
 
   private applyMessage(kind: string, id: string, message: ConversationMessage) {

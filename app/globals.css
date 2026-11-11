@@ -483,6 +483,35 @@ body:has(.messages-page) { overflow: hidden; }
 .inbox-removal-dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(4px); }
 .inbox-removal-icon { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 16px; border-radius: 12px; background: var(--brand-soft); color: var(--brand-text); }
 .inbox-delete { background: var(--brand); color: var(--brand-foreground); }
+.message-content { position: relative; display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.message-content > .message-bubble { min-width: 0; overflow-wrap: anywhere; }
+.message-actions-menu { flex: 0 0 28px; }
+.message-actions-menu summary { display: grid; place-items: center; width: 28px; height: 32px; cursor: pointer; list-style: none; border-radius: var(--radius-control); color: var(--muted); }
+.message-actions-menu summary::-webkit-details-marker { display: none; }
+.message-actions-menu summary:hover, .message-actions-menu[open] summary { color: var(--brand-text); background: var(--brand-soft); }
+.message-actions-menu summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.message-actions-popover { position: absolute; right: 0; top: calc(100% + 4px); z-index: 3; padding: 5px; width: 170px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--elevated); box-shadow: var(--shadow-sm); }
+.message-actions-popover button { display: flex; width: 100%; min-height: 40px; align-items: center; gap: 8px; padding: 10px; border-radius: var(--radius-control); font-size: 13px; text-align: left; }
+.message-actions-popover button:hover { background: var(--surface-subtle); }
+.message-inline-editor { width: min(520px, 100%); min-width: min(240px, 100%); padding: 12px; border: 1px solid var(--brand); border-radius: var(--radius-card); background: var(--surface); }
+.message-inline-editor textarea { display: block; width: 100%; min-height: 80px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--ink); font: inherit; white-space: pre-wrap; }
+.message-edit-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.message-deleted { font-style: italic; color: var(--muted); }
+.message-action-error { font-size: 12px; color: var(--danger); margin-top: 8px; }
+.message-content > .message-action-error { flex-basis: 100%; }
+.message-content { flex-wrap: wrap; }
+.message-content > .message-bubble { flex: 1; }
+.message-delete-dialog { margin: auto; width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; border: 1px solid var(--line); padding: 24px; border-radius: 16px; background: var(--surface); color: var(--ink); }
+.message-delete-dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(4px); }
+.message-delete-icon { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 16px; border-radius: 12px; background: var(--brand-soft); color: var(--brand-text); }
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+  .message-actions-menu summary { opacity: 0; }
+  .message-row:hover .message-actions-menu summary, .message-row:focus-within .message-actions-menu summary, .message-actions-menu[open] summary { opacity: 1; }
+}
+@media (pointer: coarse) {
+  .message-actions-menu { flex-basis: 44px; }
+  .message-actions-menu summary { width: 44px; height: 44px; }
+}
 @media (max-width: 640px) {
   .inbox-selection-toolbar { padding-inline: 16px; }
   .inbox-selection-toolbar.is-selecting { margin-inline: 12px; }
