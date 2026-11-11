@@ -10,7 +10,7 @@ import { useCacheIdentity } from './query-provider';
 import { queryKeys } from '@/lib/query-cache';
 import type { ScreenData } from '@/lib/screen-data';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowSquareOut, MagnifyingGlass, Plus, X } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowSquareOut, CheckSquare, DotsThree, MagnifyingGlass, Plus, Trash, X } from '@phosphor-icons/react';
 import { Conversation } from '@/components/conversation';
 import { EmptyState } from '@/components/empty-state';
 import { formatTime, initials } from '@/lib/format';
@@ -33,7 +33,7 @@ function threadHref(role: 'admin' | 'client', key: string) {
 
 function ThreadRow({ thread, selected, onSelect, removable, selecting, checked, onCheck, onRemove }: { thread: MessageWorkspaceThread; selected: boolean; onSelect: () => void; removable?: boolean; selecting?: boolean; checked?: boolean; onCheck: () => void; onRemove: () => void }) {
   const avatarLabel = thread.clientName || thread.title;
-  return <div className="inbox-row-controls">{removable && selecting && <label className="inbox-checkbox"><input type="checkbox" aria-label={`Select ${thread.title}`} checked={checked} onChange={onCheck} /></label>}<button
+  return <div className={`inbox-row-controls ${selected ? 'is-current' : ''} ${checked ? 'is-checked' : ''}`}>{removable && selecting && <label className="inbox-checkbox"><input type="checkbox" aria-label={`Select ${thread.title}`} checked={checked} onChange={onCheck} /></label>}<button
     type="button"
     className={`messages-thread-row ${selected ? 'is-selected' : ''} ${thread.unreadCount > 0 ? 'has-unread' : ''}`}
     aria-current={selected ? 'true' : undefined}
@@ -54,7 +54,7 @@ function ThreadRow({ thread, selected, onSelect, removable, selecting, checked, 
         {thread.unreadCount > 0 && <span className="unread-pill" aria-label={`${thread.unreadCount} unread`}>{thread.unreadCount}</span>}
       </span>
     </span>
-  </button>{removable && !selecting && <details className="inbox-row-menu"><summary aria-label={`Actions for ${thread.title}`}>•••</summary><div><button type="button" className="text-danger" onClick={event => { const menu = event.currentTarget.closest('details'); menu?.removeAttribute('open'); menu?.querySelector('summary')?.focus(); onRemove(); }}>Delete chat</button></div></details>}</div>;
+  </button>{removable && !selecting && <details className="inbox-row-menu"><summary aria-label={`Actions for ${thread.title}`}><DotsThree size={22} weight="bold" aria-hidden /></summary><div><button type="button" className="inbox-menu-delete" onClick={event => { const menu = event.currentTarget.closest('details'); menu?.removeAttribute('open'); menu?.querySelector('summary')?.focus(); onRemove(); }}><Trash size={16} aria-hidden />Delete chat</button></div></details>}</div>;
 }
 
 export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelectedKey, initialMessages, initialMobileConversation, projects = [] }: MessagesWorkspaceProps) {
@@ -210,7 +210,15 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
         </div>
         {role === 'admin' && <button type="button" className="button-secondary messages-new-chat" aria-label="Start or open project chat" onClick={() => { setProjectQuery(''); setProjectPicker(true); }}><Plus size={16} weight="bold" aria-hidden /><span>Project Chat</span></button>}
       </header>
-      {removable && <div className="inbox-selection-toolbar">{selecting ? <><span aria-live="polite">{chosen.length} selected</span><button type="button" className="text-danger" disabled={!chosen.length || chosen.length > 100 || removalBusy} onClick={() => { setRemovalError(''); setRemoving(chosen); }}>Delete selected</button><button type="button" onClick={() => { setSelecting(false); setChosen([]); }}>Cancel selection</button></> : <button type="button" onClick={() => setSelecting(true)}>Select chats</button>}</div>}
+      {removable && <div className={`inbox-selection-toolbar ${selecting ? 'is-selecting' : ''}`}>
+        {selecting ? <>
+          <span className="inbox-selection-count" aria-live="polite"><CheckSquare size={17} weight="fill" aria-hidden />{chosen.length} selected</span>
+          <div className="inbox-selection-actions">
+            <button type="button" className="button-danger" disabled={!chosen.length || chosen.length > 100 || removalBusy} onClick={() => { setRemovalError(''); setRemoving(chosen); }}><Trash size={16} aria-hidden />Delete selected</button>
+            <button type="button" className="button-secondary" onClick={() => { setSelecting(false); setChosen([]); }}><X size={16} aria-hidden /><span>Cancel selection</span></button>
+          </div>
+        </> : <button type="button" className="button-secondary" onClick={() => setSelecting(true)}><CheckSquare size={17} aria-hidden />Select chats</button>}
+      </div>}
       {loadError && <p role="alert" className="p-2 text-sm text-danger">{loadError}</p>}
       <label className="messages-search">
         <MagnifyingGlass size={16} aria-hidden />

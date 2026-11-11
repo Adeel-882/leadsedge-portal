@@ -460,14 +460,33 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; accent-
 body:has(.messages-page) { overflow: hidden; }
 .inbox-row-controls { display: flex; align-items: stretch; min-width: 0; position: relative; border-bottom: 1px solid var(--line); }
 .inbox-row-controls > .messages-thread-row { flex: 1; min-width: 0; border-bottom: 0; }
-.inbox-checkbox { display: flex; align-items: center; padding-left: 12px; }
-.inbox-row-menu { flex: 0 0 36px; align-self: center; margin-right: 4px; font-size: 12px; }
-.inbox-row-menu summary { cursor: pointer; list-style: none; padding: 12px 4px; border-radius: 6px; text-align: center; }
+.inbox-row-controls.is-current, .inbox-row-controls.is-checked { background: var(--brand-soft); box-shadow: inset 3px 0 0 var(--brand); }
+.inbox-row-controls.is-current > .messages-thread-row { box-shadow: none; }
+.inbox-checkbox { display: flex; align-items: center; justify-content: center; flex: 0 0 44px; cursor: pointer; }
+.inbox-checkbox input { appearance: none; width: 18px; height: 18px; margin: 0; border: 1.5px solid var(--line-strong); border-radius: 5px; background: var(--surface); cursor: pointer; display: grid; place-content: center; }
+.inbox-checkbox input:checked { background: var(--brand); border-color: var(--brand); }
+.inbox-checkbox input:checked::after { content: ''; width: 9px; height: 5px; border-left: 2px solid var(--brand-foreground); border-bottom: 2px solid var(--brand-foreground); transform: translateY(-1px) rotate(-45deg); }
+.inbox-checkbox input:focus-visible, .inbox-row-menu summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.inbox-row-menu { flex: 0 0 40px; align-self: center; margin-right: 8px; font-size: 13px; }
+.inbox-row-menu summary { display: flex; align-items: center; justify-content: center; min-height: 40px; cursor: pointer; list-style: none; border: 1px solid transparent; border-radius: var(--radius-control); color: var(--muted); }
+.inbox-row-menu summary:hover, .inbox-row-menu[open] summary { background: var(--surface); color: var(--brand-text); border-color: var(--line); }
 .inbox-row-menu summary::-webkit-details-marker { display: none; }
-.inbox-row-menu[open] { flex-basis: 86px; }
-.inbox-row-menu button { padding: 10px 4px; width: 100%; text-align: center; }
-.inbox-selection-toolbar { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 16px; font-size: 12px; border-bottom: 1px solid var(--line); }
-.inbox-selection-toolbar button { padding: 6px 0; font-weight: 600; }
+.inbox-row-menu > div { position: absolute; right: 52px; top: 50%; transform: translateY(-50%); z-index: 2; min-width: 150px; padding: 5px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--elevated); box-shadow: var(--shadow-sm); }
+.inbox-menu-delete { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 10px 12px; width: 100%; border-radius: var(--radius-control); color: var(--danger); font-weight: 650; text-align: left; }
+.inbox-menu-delete:hover { background: var(--danger-soft); }
+.inbox-selection-toolbar { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 20px 16px; font-size: 12px; }
+.inbox-selection-toolbar.is-selecting { margin: 0 16px 16px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-subtle); }
+.inbox-selection-count { display: inline-flex; align-items: center; gap: 6px; color: var(--brand-text); font-weight: 700; }
+.inbox-selection-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.inbox-selection-toolbar button { font-size: 12px; }
 .inbox-removal-dialog { color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px; width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; margin: auto; }
-.inbox-removal-dialog::backdrop { background: rgb(0 0 0 / 55%); }
-.inbox-delete { background: #FF4134; color: #070707; }
+.inbox-removal-dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(4px); }
+.inbox-removal-icon { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 16px; border-radius: 12px; background: var(--brand-soft); color: var(--brand-text); }
+.inbox-delete { background: var(--brand); color: var(--brand-foreground); }
+@media (max-width: 640px) {
+  .inbox-selection-toolbar { padding-inline: 16px; }
+  .inbox-selection-toolbar.is-selecting { margin-inline: 12px; }
+  .inbox-row-menu { flex-basis: 44px; margin-right: 4px; }
+  .inbox-row-menu summary { min-height: 44px; }
+  .inbox-removal-dialog { padding: 20px; }
+}
