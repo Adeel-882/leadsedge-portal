@@ -159,3 +159,15 @@ it('targets the cached admin project timeline for task and project message chang
  expect(client.getQueryState(own)?.isInvalidated).toBe(true);
  expect(client.getQueryState(other)?.isInvalidated).toBe(false);
 });
+it('registers own visibility once on the existing admin channel and reconciles only own changes',async()=>{
+ sync.stop();const admin={id:id(2),role:'admin' as const,inboxRemoval:true};sync=new RealtimeSync(client,admin);
+ const t=transport(admin.id);await sync.start(t.client);await sync.start(t.client);
+ expect(t.value.channel).toHaveBeenCalledOnce();
+ const registrations=t.callbacks.filter(x=>x.config.table==='message_inbox_visibility');
+ expect(registrations.map(x=>x.config.event)).toEqual(['INSERT','UPDATE']);
+ expect(registrations.every(x=>x.config.filter===`user_id=eq.${admin.id}`)).toBe(true);
+ const own=queryKeys.data(admin,'conversations');const unread=queryKeys.data(admin,'unread');
+ client.setQueryData(own,{threads:[],projects:[]});client.setQueryData(unread,{messages:3,notifications:8});
+ sync.event('message_inbox_visibility','UPDATE',{id:id(80),user_id:id(99),hidden:true});await vi.advanceTimersByTimeAsync(250);expect(client.getQueryState(own)?.isInvalidated).toBe(false);
+ sync.event('message_inbox_visibility','UPDATE',{id:id(81),user_id:admin.id,hidden:true});await vi.advanceTimersByTimeAsync(250);expect(client.getQueryState(own)?.isInvalidated).toBe(true);expect(client.getQueryState(unread)?.isInvalidated).toBe(true);expect(client.getQueryData(unread)).toEqual({messages:3,notifications:8});
+});

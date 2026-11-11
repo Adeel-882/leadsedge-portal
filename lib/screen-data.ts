@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 import { requireRole } from './auth';
-import { getAdminClients, getAdminProjects, getClientProjects, getClientTaskList, getNotifications, getTemplates, getTask, getTaskMessages, getProjectMessages, getClientConversationThreads, getAdminMessageInbox } from './queries';
+import { getAdminClients, getAdminProjects, getClientProjects, getClientTaskList, getNotifications, getTemplates, getTask, getTaskMessages, getProjectMessages, getClientConversationThreads, getAdminMessageInbox, getInboxHiddenKeys } from './queries';
 import { getPeople } from './people';
 import { getMeetings, getNextMeeting } from './meetings';
 import { canClientAccessTask } from './authorization';
@@ -21,9 +21,9 @@ export const screenLoaders = {
   },
   meetings: async (_args: string[], role: Role) => { const [meetings, projects] = await Promise.all([getMeetings(), role === 'client' ? getClientProjects(true) : Promise.resolve([])]); return { meetings, projects }; },
   conversations: async (_args: string[], role: Role) => {
-    if (role === 'client') return { threads: clientWorkspaceThreads(await getClientConversationThreads()), projects: [] };
-    const [inbox, projects] = await Promise.all([getAdminMessageInbox(), getAdminProjects()]);
-    return { threads: adminWorkspaceThreads(inbox, projects), projects: projects.filter(p => p.status === 'active') };
+    if (role === 'client') return { threads: clientWorkspaceThreads(await getClientConversationThreads()), projects: [], hiddenKeys: [] as string[] };
+    const [inbox, projects, hiddenKeys] = await Promise.all([getAdminMessageInbox(), getAdminProjects(), getInboxHiddenKeys()]);
+    return { threads: adminWorkspaceThreads(inbox, projects), projects: projects.filter(p => p.status === 'active'), hiddenKeys };
   },
 };
 export type ScreenName = keyof typeof screenLoaders;

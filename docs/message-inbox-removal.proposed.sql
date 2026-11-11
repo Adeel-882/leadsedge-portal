@@ -1,4 +1,4 @@
--- PROPOSAL ONLY. Not applied. Keep outside supabase/migrations until approved.
+-- Reviewed local migration. NOT applied to Frankfurt; separate approval required.
 -- Compare live schema/function definitions with the repository before applying.
 begin;
 
@@ -45,8 +45,10 @@ begin
   if hide is null or coalesce(cardinality(project_ids), 0) + coalesce(cardinality(task_ids), 0) not between 1 and 100 then
     raise exception 'Choose between 1 and 100 conversations' using errcode = '22023';
   end if;
-  -- Deterministic lock ordering for bulk requests. The incoming-message trigger
-  -- shares these locks, so inserts/removal serialize without timestamp guesses.
+  -- One short transaction lock also covers multi-resource INSERT statements.
+  -- Acquire before visibility/FK writes so opposite row orders cannot deadlock
+  -- through this feature's locks. No external calls occur inside the transaction.
+  perform pg_catalog.pg_advisory_xact_lock(741139, 110001);
   for target in
     select 'project'::text as kind, unnest(project_ids) as resource_id
     union
@@ -56,7 +58,6 @@ begin
     if target.resource_id is null then
       raise exception 'Invalid conversation' using errcode = '22023';
     end if;
-    perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('inbox:' || target.kind || ':' || target.resource_id::text, 0));
     if target.kind = 'project' then
       if not exists(select 1 from public.projects p where p.id = target.resource_id)
          or not public.is_project_member(target.resource_id) then
@@ -95,12 +96,11 @@ returns trigger language plpgsql security definer set search_path = ''
 as $$
 begin
   if new.message_type <> 'user' then return new; end if;
+  perform pg_catalog.pg_advisory_xact_lock(741139, 110001);
   if TG_TABLE_NAME = 'project_messages' then
-    perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('inbox:project:' || new.project_id::text, 0));
     update public.message_inbox_visibility set hidden = false, reopened_at = clock_timestamp()
       where project_id = new.project_id and hidden;
   elsif TG_TABLE_NAME = 'task_messages' then
-    perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('inbox:task:' || new.task_id::text, 0));
     update public.message_inbox_visibility set hidden = false, reopened_at = clock_timestamp()
       where task_id = new.task_id and hidden;
   end if;
@@ -108,9 +108,9 @@ begin
 end;
 $$;
 revoke all on function public.reopen_message_inboxes() from public, anon, authenticated;
-create trigger reopen_project_message_inboxes after insert on public.project_messages
+create trigger reopen_project_message_inboxes before insert on public.project_messages
   for each row execute function public.reopen_message_inboxes();
-create trigger reopen_task_message_inboxes after insert on public.task_messages
+create trigger reopen_task_message_inboxes before insert on public.task_messages
   for each row execute function public.reopen_message_inboxes();
 
 -- Preserve the repository's existing authorization/message-type/recipient/read

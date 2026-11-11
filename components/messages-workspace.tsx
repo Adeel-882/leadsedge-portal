@@ -1,4 +1,8 @@
 'use client';
+import { InboxRemovalDialog } from './inbox-removal-dialog';
+import { useRealtimeSync } from './realtime-provider';
+import { visibilityRequest } from '@/lib/inbox-visibility';
+
 
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
@@ -27,9 +31,9 @@ function threadHref(role: 'admin' | 'client', key: string) {
   return `/${role === 'admin' ? 'admin' : 'portal'}/messages?thread=${encodeURIComponent(key)}`;
 }
 
-function ThreadRow({ thread, selected, onSelect }: { thread: MessageWorkspaceThread; selected: boolean; onSelect: () => void }) {
+function ThreadRow({ thread, selected, onSelect, removable, selecting, checked, onCheck, onRemove }: { thread: MessageWorkspaceThread; selected: boolean; onSelect: () => void; removable?: boolean; selecting?: boolean; checked?: boolean; onCheck: () => void; onRemove: () => void }) {
   const avatarLabel = thread.clientName || thread.title;
-  return <button
+  return <div className="inbox-row-controls">{removable && selecting && <label className="inbox-checkbox"><input type="checkbox" aria-label={`Select ${thread.title}`} checked={checked} onChange={onCheck} /></label>}<button
     type="button"
     className={`messages-thread-row ${selected ? 'is-selected' : ''} ${thread.unreadCount > 0 ? 'has-unread' : ''}`}
     aria-current={selected ? 'true' : undefined}
@@ -50,7 +54,7 @@ function ThreadRow({ thread, selected, onSelect }: { thread: MessageWorkspaceThr
         {thread.unreadCount > 0 && <span className="unread-pill" aria-label={`${thread.unreadCount} unread`}>{thread.unreadCount}</span>}
       </span>
     </span>
-  </button>;
+  </button>{removable && !selecting && <details className="inbox-row-menu"><summary aria-label={`Actions for ${thread.title}`}>•••</summary><div><button type="button" className="text-danger" onClick={event => { const menu = event.currentTarget.closest('details'); menu?.removeAttribute('open'); menu?.querySelector('summary')?.focus(); onRemove(); }}>Delete chat</button></div></details>}</div>;
 }
 
 export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelectedKey, initialMessages, initialMobileConversation, projects = [] }: MessagesWorkspaceProps) {
@@ -87,7 +91,15 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
   }, [role]);
   const client = useQueryClient();
   const identity = useCacheIdentity();
+  const sync = useRealtimeSync();
+  const removable = role === 'admin' && identity.inboxRemoval;
+  const [selecting, setSelecting] = useState(false);
+  const [chosenKeys, setChosen] = useState<string[]>([]);
+  const [removing, setRemoving] = useState<string[]>([]);
+  const [removalError, setRemovalError] = useState('');
+  const [removalBusy, setRemovalBusy] = useState(false);
   const threads = initialThreads;
+  const chosen = chosenKeys.filter(key => threads.some(thread => thread.key === key));
   const setThreads = useCallback((update: (current: MessageWorkspaceThread[]) => MessageWorkspaceThread[]) => {
     client.setQueryData<ScreenData<'conversations'>>(queryKeys.data(identity,'conversations'), current => current && {...current,threads:update(current.threads)});
   }, [client,identity]);
@@ -119,7 +131,7 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
 
     setSelectedKey(thread.key);
     setLoadError('');
-  }, [role, selectedKey]);
+  }, [role, selectedKey, setMobileConversation, setSelectedKey, setLoadError]);
 
   useEffect(() => {
     const onPopState = () => {
@@ -132,7 +144,39 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
     return () => window.removeEventListener('popstate', onPopState);
   }, [selectThread, threads]);
 
-  function openProject(project: ProjectSummary) {
+  async function changeVisibility(keys: string[], hide: boolean) {
+    await sync.withRead(async () => {
+      const response = await fetch('/api/messages/visibility', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(visibilityRequest(keys, hide)) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to update inbox.');
+      client.setQueryData<ScreenData<'conversations'>>(queryKeys.data(identity, 'conversations'), current => current && ({ ...current,
+        threads: hide ? current.threads.filter(thread => !keys.includes(thread.key)) : current.threads,
+        hiddenKeys: hide ? [...new Set([...(current.hiddenKeys || []), ...keys])] : (current.hiddenKeys || []).filter(key => !keys.includes(key)),
+      }));
+    });
+  }
+  async function removeChats() {
+    setRemovalBusy(true); setRemovalError('');
+    try {
+      await changeVisibility(removing, true);
+      setRemoving([]); setChosen([]); setSelecting(false);
+    } catch (error) { setRemovalError(error instanceof Error ? error.message : 'Unable to update inbox.'); }
+    finally { setRemovalBusy(false); }
+  }
+  const threadKeys = threads.map(thread => thread.key).join('|');
+  useEffect(() => {
+    const keys = threadKeys.split('|').filter(Boolean);
+    if (selectedKey && !keys.includes(selectedKey)) {
+      const next = selected?.key || null;
+      window.history.replaceState({}, '', next ? threadHref(role, next) : `/${role === 'admin' ? 'admin' : 'portal'}/messages`);
+    }
+  }, [threadKeys, selectedKey, selected?.key, role]);
+
+  async function openProject(project: ProjectSummary) {
+    if (removable) {
+      try { await changeVisibility([`project:${project.id}`], false); }
+      catch (error) { setLoadError(error instanceof Error ? error.message : 'Unable to open chat.'); return; }
+    }
     const thread = projectChatSelection(role, projects, threads, project.id);
     if (!thread) return;
     setThreads((current) => current.some(item => item.key === thread.key) ? current : [...current, thread]);
@@ -143,21 +187,21 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
   }
 
   const conversationRead = useCallback((readMessages: number) => {
-    if (!readMessages || !selectedKey) return;
-    setThreads((current) => current.map((thread) => thread.key === selectedKey ? { ...thread, unreadCount: Math.max(0, thread.unreadCount - readMessages) } : thread));
-  }, [selectedKey, setThreads]);
+    if (!readMessages || !selected?.key) return;
+    setThreads((current) => current.map((thread) => thread.key === selected?.key ? { ...thread, unreadCount: Math.max(0, thread.unreadCount - readMessages) } : thread));
+  }, [selected?.key, setThreads]);
 
   const messageSent = useCallback((message: ConversationMessage) => {
-    if (!selectedKey) return;
-    setThreads((current) => current.map((thread) => thread.key === selectedKey ? {
+    if (!selected?.key) return;
+    setThreads((current) => current.map((thread) => thread.key === selected?.key ? {
       ...thread,
       preview: message.body,
       senderName: 'You',
       lastMessageAt: message.createdAt,
     } : thread));
-  }, [selectedKey, setThreads]);
+  }, [selected?.key, setThreads]);
 
-  return <div ref={workspaceRef} className={`messages-workspace ${mobileConversation ? 'mobile-conversation-open' : ''}`}>
+  return <div ref={workspaceRef} className={`messages-workspace ${mobileConversation && selected ? 'mobile-conversation-open' : ''}`}>
     <aside className="messages-rail" aria-label="Conversation list">
       <header className="messages-rail-header">
         <div>
@@ -166,6 +210,8 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
         </div>
         {role === 'admin' && <button type="button" className="button-secondary messages-new-chat" aria-label="Start or open project chat" onClick={() => { setProjectQuery(''); setProjectPicker(true); }}><Plus size={16} weight="bold" aria-hidden /><span>Project Chat</span></button>}
       </header>
+      {removable && <div className="inbox-selection-toolbar">{selecting ? <><span aria-live="polite">{chosen.length} selected</span><button type="button" className="text-danger" disabled={!chosen.length || chosen.length > 100 || removalBusy} onClick={() => { setRemovalError(''); setRemoving(chosen); }}>Delete selected</button><button type="button" onClick={() => { setSelecting(false); setChosen([]); }}>Cancel selection</button></> : <button type="button" onClick={() => setSelecting(true)}>Select chats</button>}</div>}
+      {loadError && <p role="alert" className="p-2 text-sm text-danger">{loadError}</p>}
       <label className="messages-search">
         <MagnifyingGlass size={16} aria-hidden />
         <span className="sr-only">Search conversations</span>
@@ -173,7 +219,7 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
       </label>
       <div className="messages-filters" role="group" aria-label="Filter conversations">{([['all', 'All'], ['unread', 'Unread'], ['project', 'Project Chats'], ['task', 'Task Chats']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div>
       <div className="messages-thread-list">
-        {filteredThreads.map((thread) => <ThreadRow key={thread.key} thread={thread} selected={thread.key === selected?.key} onSelect={() => void selectThread(thread)} />)}
+        {filteredThreads.map((thread) => <ThreadRow key={thread.key} thread={thread} removable={removable} selecting={selecting} checked={chosen.includes(thread.key)} onCheck={() => setChosen(current => current.includes(thread.key) ? current.filter(key => key !== thread.key) : [...current, thread.key])} onRemove={() => { setRemovalError(''); setRemoving([thread.key]); }} selected={thread.key === selected?.key} onSelect={() => void selectThread(thread)} />)}
         {!filteredThreads.length && <p className="px-4 py-8 text-center text-sm text-muted">{threads.length ? 'No conversations match your search.' : 'No conversations yet.'}</p>}
       </div>
     </aside>
@@ -196,6 +242,7 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
       </> : <div className="messages-pane-empty"><EmptyState title="No message conversations yet" body={role === 'admin' ? 'Start a project chat to open the first conversation.' : 'Your project conversations will appear here.'} /></div>}
     </section>
 
+    {removing.length > 0 && <InboxRemovalDialog count={removing.length} busy={removalBusy} error={removalError} cancel={() => setRemoving([])} confirm={() => void removeChats()} />}
     {role === 'admin' && projectPicker && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="project-chat-title"><div className="modal-card"><div className="flex items-start justify-between"><div><p className="page-eyebrow">Start or open</p><h2 id="project-chat-title" className="text-2xl font-bold">Project chat</h2><p className="mt-2 text-sm leading-6 text-muted">Choose an active project. Its conversation opens in the Messages workspace.</p></div><button className="icon-button" aria-label="Close" onClick={() => setProjectPicker(false)}><X size={19} aria-hidden /></button></div><label className="messages-search mt-4"><MagnifyingGlass size={16} aria-hidden /><span className="sr-only">Search client or project</span><input autoFocus value={projectQuery} onChange={event => setProjectQuery(event.target.value)} placeholder="Search client or project" /></label><div className="mt-4 max-h-80 overflow-y-auto border-y border-line">{matchingProjects.map((project) => <button type="button" key={project.id} onClick={() => openProject(project)} className="messages-project-option"><span className="avatar h-9 w-9 bg-brand-soft text-brand-text">{initials(project.clientName)}</span><span className="min-w-0 text-left"><b className="block truncate text-sm">{project.clientName}</b><small className="text-muted">Project: {project.projectName}</small></span><span className="ml-auto text-xs text-brand-text">Open chat</span></button>)}{!matchingProjects.length && <p className="p-4 text-sm text-muted">{projects.length ? 'No clients or projects match your search.' : 'No active projects available.'}</p>}</div><div className="mt-6 flex justify-end"><button className="button-secondary" onClick={() => setProjectPicker(false)}>Close</button></div></div></div>}
   </div>;
 }

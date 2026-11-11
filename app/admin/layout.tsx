@@ -1,3 +1,4 @@
+import { inboxRemovalEnabled } from '@/lib/inbox-visibility';
 import { QueryProvider } from '@/components/query-provider';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { DemoBanner, EmailConfigurationBanner } from '@/components/demo-banner';
@@ -7,5 +8,5 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { viewer, unread } = await requireBootstrapRole('admin');
-  return <QueryProvider identity={{ id: viewer.id, role: 'admin' }}><AdminShell displayName={viewer.fullName} viewerId={viewer.id} messageUnreadCount={unread.messages} notificationUnreadCount={unread.notifications}><DemoBanner /><EmailConfigurationBanner />{children}</AdminShell></QueryProvider>;
+  return <QueryProvider identity={{ id: viewer.id, role: 'admin', inboxRemoval: inboxRemovalEnabled() }}><AdminShell displayName={viewer.fullName} viewerId={viewer.id} messageUnreadCount={unread.messages} notificationUnreadCount={unread.notifications}><DemoBanner /><EmailConfigurationBanner />{children}</AdminShell></QueryProvider>;
 }

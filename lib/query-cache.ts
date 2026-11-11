@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import type { Role } from './types';
-export type CacheIdentity = { id: string; role: Role };
+export type CacheIdentity = { id: string; role: Role; inboxRemoval?: boolean };
 export const queryKeys = {
   scope: (identity: CacheIdentity) => ['private', identity.id, identity.role] as const,
   data: (identity: CacheIdentity, resource: string, ...args: (string | number)[]) => [...queryKeys.scope(identity), resource, ...args] as const,

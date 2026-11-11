@@ -61,6 +61,7 @@ export class RealtimeSync {
     listen('project_messages', 'INSERT');
     listen('task_messages', 'INSERT');
     for (const event of ['INSERT', 'UPDATE'] as const) {
+      if (this.identity.role === 'admin' && this.identity.inboxRemoval) listen('message_inbox_visibility', event, `user_id=eq.${this.identity.id}`);
       listen('message_read_receipts', event, `recipient_id=eq.${this.identity.id}`);
       listen('notifications', event, `user_id=eq.${this.identity.id}`);
       listen('project_tasks', event);
@@ -171,6 +172,7 @@ export class RealtimeSync {
 
   event(table: string, event: string, row: Row) {
     if (!this.alive || !['INSERT','UPDATE'].includes(event) || !uuid(row.id)) return;
+    if (table === 'message_inbox_visibility') { if (this.identity.role === 'admin' && this.identity.inboxRemoval && row.user_id === this.identity.id) this.communicationChanged(); return; }
     if (table === 'message_read_receipts') { if (row.recipient_id === this.identity.id) this.communicationChanged(); return; }
     if (table === 'notifications') { if (row.user_id === this.identity.id) { this.enqueue('unread'); this.enqueue('home'); } return; }
     if (table === 'project_tasks') {

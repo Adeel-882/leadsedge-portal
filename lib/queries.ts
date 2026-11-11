@@ -1,3 +1,4 @@
+import { inboxRemovalEnabled, visibilityKeys } from './inbox-visibility';
 import { sanitizeTaskDescription } from './rich-text';
 export { sanitizeTaskDescription } from './rich-text';
 import { cache } from 'react';
@@ -434,6 +435,19 @@ export async function getClientTaskList(): Promise<ClientTaskSummary[]> {
   });
 }
 
+export const getInboxHiddenKeys = cache(async (): Promise<string[]> => {
+  if (!inboxRemovalEnabled() || isDemoMode()) return [];
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) throw new Error('Unable to load inbox visibility.');
+  const keys: string[] = [];
+  for (let start = 0; ; start += 1000) {
+    const { data, error } = await supabase.from('message_inbox_visibility').select('project_id,task_id').eq('hidden', true).order('id').range(start, start + 999);
+    if (error) throw new Error('Unable to load inbox visibility.');
+    keys.push(...visibilityKeys(data || []));
+    if (!data || data.length < 1000) return keys;
+  }
+});
+
 export async function getAdminMessageInbox(): Promise<AdminConversationSummary[]> {
   if (isDemoMode()) return [
     { kind: 'task', resourceId: demoTasks[0].id, projectId: demoProjects[0].id, projectName: demoProjects[0].projectName, taskTitle: demoTasks[0].title, senderName: demoTaskMessages.at(-1)?.senderName || demoClient.fullName, preview: demoTaskMessages.at(-1)?.body || '', lastMessageAt: demoTaskMessages.at(-1)?.createdAt || new Date(0).toISOString(), unreadCount: 1, href: `/admin/projects/${demoProjects[0].id}/tasks/${demoTasks[0].id}#conversation` },
@@ -441,10 +455,11 @@ export async function getAdminMessageInbox(): Promise<AdminConversationSummary[]
   ];
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
-  const [projectResult, taskResult, unreadResult] = await Promise.all([
+  const [projectResult, taskResult, unreadResult, hiddenKeys] = await Promise.all([
     supabase.from('project_messages').select('project_id,body,created_at,sender:users(full_name),project:projects(project_name)').eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
     supabase.from('task_messages').select('task_id,body,created_at,sender:users(full_name),task:project_tasks!inner(title,project_id,archived_at,project:projects(project_name))').eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
     supabase.from('message_read_receipts').select('project_message:project_messages(project_id,message_type,body,created_at,sender:users(full_name),project:projects(project_name)),task_message:task_messages(task_id,message_type,body,created_at,sender:users(full_name),task:project_tasks!inner(title,project_id,archived_at,project:projects(project_name)))').is('read_at', null),
+    getInboxHiddenKeys(),
   ]);
   if (projectResult.error || taskResult.error || unreadResult.error) throw new Error('Unable to load message inbox.');
   const projectUnreadCounts = new Map<string, number>();
@@ -496,5 +511,6 @@ export async function getAdminMessageInbox(): Promise<AdminConversationSummary[]
     const key = `${summary.kind}:${summary.resourceId}`;
     if (!items.has(key)) items.set(key, { ...summary, unreadCount: summary.kind === 'project' ? projectUnreadCounts.get(summary.resourceId) || 0 : taskUnreadCounts.get(summary.resourceId) || 0 });
   }
-  return [...items.values()].sort((a, b) => Number(b.unreadCount > 0) - Number(a.unreadCount > 0) || Date.parse(b.lastMessageAt) - Date.parse(a.lastMessageAt));
+  const hidden = new Set(hiddenKeys);
+  return [...items.values()].filter(item => !hidden.has(`${item.kind}:${item.resourceId}`)).sort((a, b) => Number(b.unreadCount > 0) - Number(a.unreadCount > 0) || Date.parse(b.lastMessageAt) - Date.parse(a.lastMessageAt));
 }

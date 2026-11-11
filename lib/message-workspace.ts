@@ -77,10 +77,10 @@ export function emptyAdminProjectThread(project: ProjectSummary): MessageWorkspa
   };
 }
 
-export function retainOpenProjectThreads<T extends {threads:MessageWorkspaceThread[];projects:ProjectSummary[]}>(next: T, previous?: T): T {
+export function retainOpenProjectThreads<T extends {threads:MessageWorkspaceThread[];projects:ProjectSummary[];hiddenKeys?:string[]}>(next: T, previous?: T): T {
   const present = new Set(next.threads.map(thread => thread.key));
   const allowed = new Map(next.projects.map(project => [project.id,project]));
-  const retained = (previous?.threads || []).filter(thread => thread.kind==='project' && !present.has(thread.key) && allowed.has(thread.resourceId)).map(thread => emptyAdminProjectThread(allowed.get(thread.resourceId)!));
+  const retained = (previous?.threads || []).filter(thread => thread.kind==='project' && !next.hiddenKeys?.includes(thread.key) && !present.has(thread.key) && allowed.has(thread.resourceId)).map(thread => emptyAdminProjectThread(allowed.get(thread.resourceId)!));
   return retained.length ? {...next,threads:[...next.threads,...retained]} : next;
 }
 
