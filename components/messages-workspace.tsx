@@ -64,7 +64,10 @@ export function MessagesWorkspace({ role, viewerId, initialThreads, initialSelec
       const bottom = (viewport?.height ?? window.innerHeight) + (viewport?.offsetTop ?? 0);
       const nav = document.querySelector(role === 'admin' ? '.mobile-admin-nav' : '.portal-mobile-nav');
       const navTop = nav && nav.getBoundingClientRect().height > 0 ? nav.getBoundingClientRect().top : bottom;
-      const height = Math.max(0, Math.min(bottom, navTop) - page.getBoundingClientRect().top);
+      // Focus can scroll even an overflow-hidden document. Do not mistake that
+      // scroll for extra layout space underneath the fixed mobile navigation.
+      const pageTop = page.getBoundingClientRect().top + window.scrollY;
+      const height = Math.max(0, Math.min(bottom, navTop) - pageTop);
       page.style.setProperty('--messages-available-height', `${height}px`);
     };
     const observer = new ResizeObserver(fit);

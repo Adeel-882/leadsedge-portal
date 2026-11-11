@@ -431,7 +431,7 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; accent-
 .messages-pane .message-bubble { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; font-size: 14px; line-height: 1.6; }
 .messages-pane .message-row.mine .message-bubble { background: var(--brand-soft); color: var(--ink); border-color: transparent; }
 .message-composer { flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; background: var(--surface); }
-.message-composer textarea { resize: vertical; min-height: 68px; max-height: 140px; font: inherit; line-height: 1.5; padding: 12px; }
+.message-composer textarea { box-sizing: border-box; resize: none; min-height: 48px; max-height: none; overflow-y: hidden; font: inherit; line-height: 1.5; padding: 12px; }
 .message-composer-help { grid-column: 1 / -1; font-size: 10px; color: var(--muted); }
 .messages-open-lead { white-space: nowrap; }
 .task-rich-text { font-weight: 400; font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
