@@ -4,7 +4,7 @@ import { getViewer } from '@/lib/auth';
 import { isDemoMode } from '@/lib/env';
 import { resolveRequestOrigin } from '@/lib/request-origin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { messageEditSchema, DELETED_MESSAGE } from '@/lib/message-edit';
+import { messageEditSchema } from '@/lib/message-edit';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ kind: string; resourceId: string; messageId: string }> }) {
   const viewer = await getViewer();
@@ -30,5 +30,5 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const status = error?.code === '42501' ? 403 : error?.code === '40001' ? 409 : error?.code === '22023' ? 400 : 503;
     return NextResponse.json({ error: status === 409 ? 'This message changed on another device. Cancel and reopen the editor to use the latest version.' : 'Unable to change this message.' }, { status });
   }
-  return NextResponse.json({ message: { id: data.id, senderId: data.sender_id, senderName: viewer.fullName, senderRole: viewer.role, body: data.deleted_at ? DELETED_MESSAGE : data.body, attachmentUrl: data.deleted_at ? null : data.attachment_url, createdAt: data.created_at, editedAt: data.edited_at, deletedAt: data.deleted_at, version: data.message_version, messageType: data.message_type } }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ message: { id: data.id, senderId: data.sender_id, senderName: viewer.fullName, senderRole: viewer.role, body: data.deleted_at ? '' : data.body, attachmentUrl: data.deleted_at ? null : data.attachment_url, createdAt: data.created_at, editedAt: data.edited_at, deletedAt: data.deleted_at, version: data.message_version, messageType: data.message_type } }, { headers: { 'Cache-Control': 'no-store' } });
 }

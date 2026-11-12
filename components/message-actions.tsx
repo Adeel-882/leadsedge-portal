@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DotsThree, PencilSimple, Trash } from '@phosphor-icons/react';
 import { MessageBody } from './message-body';
 import { MessageInput } from './message-input';
-import { canMutateMessage, DELETED_MESSAGE } from '@/lib/message-edit';
+import { canMutateMessage } from '@/lib/message-edit';
 import type { ConversationMessage } from '@/lib/types';
 
 export function MessageActions({ message, viewerId, kind, resourceId, saved, conflicted }: {
@@ -42,11 +42,12 @@ export function MessageActions({ message, viewerId, kind, resourceId, saved, con
     finally { if (mounted.current) setBusy(false); }
   }
   const allowed = canMutateMessage(message, viewerId);
+  if (message.deletedAt) return null;
   return <div className="message-content">
     {edit && allowed ? <div className="message-inline-editor">
       <MessageInput autoFocus aria-label="Edit message" value={edit.body} maxLength={5000} onChange={e => setEdit({...edit, body:e.target.value})} onKeyDown={e => { if (e.key === 'Escape' && !busy) { setEdit(null); setError(''); } }} />
       <div className="message-edit-buttons"><button type="button" className="button-secondary" disabled={busy} onClick={() => { setEdit(null); setError(''); }}>Cancel</button><button type="button" className="button-primary" disabled={busy || !edit.body.trim()} onClick={() => void persist('edit')}>{busy ? 'Saving…' : 'Save'}</button></div>
-    </div> : <div className={`message-bubble ${message.deletedAt ? 'message-deleted' : ''}`}>{message.deletedAt ? DELETED_MESSAGE : <MessageBody body={message.body} />}</div>}
+    </div> : <div className="message-bubble"><MessageBody body={message.body} /></div>}
     {allowed && !edit && <details className="message-actions-menu">
       <summary aria-label="Message actions"><DotsThree size={20} weight="bold" aria-hidden /></summary>
       <div className="message-actions-popover">

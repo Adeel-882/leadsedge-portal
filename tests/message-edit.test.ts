@@ -40,7 +40,7 @@ describe('authenticated message mutations', () => {
   });
   it('returns no deleted content or attachment even if provider row is malformed', async () => {
     mock.rpc.mockResolvedValue({data:{id:id(2),sender_id:id(1),body:'Secret old body',attachment_url:'https://example.com/private',deleted_at:deleted.deletedAt,message_version:2}});
-    const r=await PATCH(req({operation:'delete',version:1}),{params:params()});const result=await r.json();expect(result.message.body).toBe(DELETED_MESSAGE);expect(result.message.attachmentUrl).toBeNull();expect(r.headers.get('cache-control')).toBe('no-store');
+    const r=await PATCH(req({operation:'delete',version:1}),{params:params()});const result=await r.json();expect(result.message.body).toBe('');expect(result.message.attachmentUrl).toBeNull();expect(r.headers.get('cache-control')).toBe('no-store');
   });
 });
 it('validates length/whitespace and preserves intentional newlines', () => {
@@ -65,20 +65,20 @@ it('an UPDATE arriving before an older page prevents that page restoring deleted
   const client=makeQueryClient();const identity={id:id(1),role:'admin' as const};const sync=new RealtimeSync(client,identity);
   client.setQueryData(queryKeys.messages(identity,'project',id(3)),appendMessage(undefined,{...base,id:id(4)}));
   sync.event('project_messages','UPDATE',{id:base.id,project_id:id(3),sender_id:base.senderId,created_at:base.createdAt,message_type:'user',body:DELETED_MESSAGE,deleted_at:deleted.deletedAt,message_version:2});
-  expect(flattenMessages(sync.reconcileHistory('project',id(3),appendMessage(undefined,base)))[0].body).toBe(DELETED_MESSAGE);
+  expect(flattenMessages(sync.reconcileHistory('project',id(3),appendMessage(undefined,base)))[0].body).toBe('');
   expect(flattenMessages(sync.reconcileHistory('project',id(9),appendMessage(undefined,base)))[0].body).toBe('Original');
   sync.stop();client.clear();
 });
-it.each(['project','task'])('%s UPDATE reconciles older history and preview without reopening, read or unread mutations', async kind => {
+it.each(['project','task'])('%s UPDATE reconciles older history and preview without reopening or reading receipts', async kind => {
   const client=makeQueryClient();const identity={id:id(1),role:'admin' as const,inboxRemoval:true};const sync=new RealtimeSync(client,identity);
   const key=queryKeys.messages(identity,kind,id(3));client.setQueryData(key,appendMessage(undefined,base));
   const inventoryKey=queryKeys.data(identity,'conversations');client.setQueryData(inventoryKey,{threads:[{kind,resourceId:id(3),lastMessageAt:base.createdAt,preview:base.body}],hiddenKeys:['project:'+id(9)]});
   client.setQueryData(queryKeys.data(identity,'unread'),{messages:7});
   const read=vi.fn(async()=>0);sync.register(kind,id(3),{read,refresh:vi.fn(async()=>{})});await new Promise(r=>setTimeout(r,250));read.mockClear();
   sync.event(kind+'_messages','UPDATE',{id:base.id,[kind+'_id']:id(3),sender_id:base.senderId,created_at:base.createdAt,message_type:'user',body:'old secret',deleted_at:deleted.deletedAt,message_version:2});
-  expect(flattenMessages(client.getQueryData(key))[0].body).toBe(DELETED_MESSAGE);
-  expect(client.getQueryData(inventoryKey)).toMatchObject({hiddenKeys:['project:'+id(9)],threads:[{preview:DELETED_MESSAGE,lastMessageAt:base.createdAt}]});
+  expect(flattenMessages(client.getQueryData(key))[0].body).toBe('');
+  expect(client.getQueryData(inventoryKey)).toMatchObject({hiddenKeys:['project:'+id(9)],threads:[{preview:null,lastMessageAt:null}]});
   expect(client.getQueryData(queryKeys.data(identity,'unread'))).toEqual({messages:7});await new Promise(r=>setTimeout(r,250));expect(read).not.toHaveBeenCalled();
-  sync.event(kind+'_messages','UPDATE',{id:base.id,[kind+'_id']:id(3),sender_id:base.senderId,created_at:base.createdAt,message_type:'user',body:'stale',message_version:1});expect(flattenMessages(client.getQueryData(key))[0].body).toBe(DELETED_MESSAGE);
+  sync.event(kind+'_messages','UPDATE',{id:base.id,[kind+'_id']:id(3),sender_id:base.senderId,created_at:base.createdAt,message_type:'user',body:'stale',message_version:1});expect(flattenMessages(client.getQueryData(key))[0].body).toBe('');
   sync.stop();client.clear();
 });

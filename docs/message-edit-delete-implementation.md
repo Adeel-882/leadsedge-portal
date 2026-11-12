@@ -185,3 +185,70 @@ If required, revoke authenticated EXECUTE on the new RPC to disable mutations.
 Do not drop metadata columns, resurrect deleted bodies, restore over production,
 or roll back the working inbox-removal migration. Previously deleted message
 bodies cannot be recovered from this feature's tombstones.
+
+## Frankfurt production recovery — 2026-11-12
+
+This section supersedes the earlier unapplied-migration checkpoint above.
+
+Cause: application commit `2b903a21fbf13e979b88bee7c36bd32cca0a7682` queried
+revision columns before the database migration, producing PostgreSQL 42703.
+Hostinger deployment identity was established from the supplied deployment screenshot
+and Git evidence, not a newly authenticated Hostinger inspection. Previous working
+commit: `98f87ab8f236438827f5bf3dbb70d2bdc20fa748`.
+
+Only `202611120001_message_edit_delete.sql` was applied to Frankfurt
+`tfrljxzknnhkynobvetg`. SHA256:
+`c85f631f512751b2ed0d752b4cdc04901dd47d56ddb508801e40973416f6ada8`.
+The guarded transaction committed. No application deployment or Git push occurred.
+
+Recovery: a fresh application-schema/data custom-format backup was stored outside
+the repository in the user's EFS-encrypted, restricted-ACL LeadsEdge-Recovery folder.
+No fresh Auth export was performed. Archive inventory and full archive readability
+passed; an actual restore was not exercised. Backup SHA256:
+`af32e7a48e9d8a5d7b5ca368c5d6aeb970edd4c35a2950b8f4da1643ddd0dc23`.
+Existing full encrypted recovery export was retained. Free-plan provider PITR was
+unavailable. No backup contents or credentials are included in this report.
+
+The same transaction fingerprinted all original row values in 25 public tables
+(excluding only the three newly added columns) and checked counts and unread
+results for all 17 users. All were unchanged. Historical revision metadata is
+null/null/0. Existing IDs, bodies, ownership and timestamps were preserved.
+
+| Table | Before | After |
+| --- | ---: | ---: |
+| project_messages | 8 | 8 |
+| task_messages | 30 | 30 |
+| projects | 13 | 13 |
+| project_tasks | 17 | 17 |
+| clients | 15 | 15 |
+| message_read_receipts | 38 | 38 |
+| notifications | 73 | 73 |
+
+Post-commit catalog comparison confirmed existing RLS, table grants, functions and
+triggers unchanged. Only the expected columns, constraints, revision initialization
+triggers and new functions were introduced. Realtime publication table membership
+and UPDATE configuration were preserved; published column lists naturally include
+the three new columns. The first attempt rolled back because the safety guard
+incorrectly required identical published column lists. The guard was corrected to
+allow exactly the three added columns, and the same migration then committed.
+
+Read-only Data API queries selecting all new columns returned HTTP 200 for both
+message tables, replacing the prior 42703 responses. PostgREST resolved the new RPC
+and rejected anonymous execution with 401/42501; no cache refresh was required.
+Authenticated-role read-only RLS checks returned 8 project/30 task messages for
+an existing administrator and 3 project/0 task messages for the existing primary
+client. Unread counts were 0 and 3 respectively. These checks did not mark messages
+read and do not substitute for browser sign-in acceptance.
+
+The production browser opened successfully but required sign-in. Consequently,
+actual authenticated history rendering, pagination, new sends, edit/delete UI,
+refresh persistence and cross-device Realtime UPDATE delivery remain manual
+acceptance items. No real client messages were sent, edited or deleted for testing.
+Earlier local regression results remain 525 passed / 1 skipped, with typecheck,
+lint and Frankfurt build passing; no application code changed during recovery.
+
+No additional Hostinger variable is needed for individual message edit/delete or
+to fix this schema error. The existing inbox-removal flag remains a separate feature.
+Refresh production Messages to retry loading. Verify edit/delete only in an approved
+disposable conversation. Preserve additive metadata during any app rollback; do not
+restore a backup over live data or drop columns to roll back the UI feature.

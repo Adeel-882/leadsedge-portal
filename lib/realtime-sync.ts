@@ -1,8 +1,8 @@
-import { DELETED_MESSAGE } from './message-edit';
+import { newestMessage } from './message-edit';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { freshness, queryKeys, type CacheIdentity } from './query-cache';
-import { appendMessage, updateMessage, flattenMessages, type MessagePages } from './message-cache';
+import { appendMessage, updateMessage, flattenMessages, visibleMessages, type MessagePages } from './message-cache';
 import type { ConversationMessage, MessageWorkspaceThread, ProjectSummary, ClientTaskSummary } from './types';
 
 type Row = Record<string, unknown>;
@@ -201,10 +201,10 @@ export class RealtimeSync {
       if (!uuid(id) || !Number.isInteger(row.message_version) || Number(row.message_version)<1) return;
       const previous = flattenMessages(this.client.getQueryData<MessagePages>(queryKeys.messages(this.identity,kind,id))).find(m=>m.id===row.id);
       if (this.knownMessageScope(kind,id) && uuid(row.sender_id) && typeof row.created_at==='string' && typeof row.body==='string') {
-        this.messageChanged(kind,id,{id:row.id,senderId:row.sender_id,senderName:previous?.senderName || '',senderRole:previous?.senderRole || 'client',createdAt:row.created_at,body:typeof row.deleted_at==='string'?DELETED_MESSAGE:row.body,attachmentUrl:typeof row.deleted_at==='string'?null:typeof row.attachment_url==='string'?row.attachment_url:null,version:Number(row.message_version),messageType:'user',editedAt:typeof row.edited_at==='string'?row.edited_at:null,deletedAt:typeof row.deleted_at==='string'?row.deleted_at:null});
+        this.messageChanged(kind,id,{id:row.id,senderId:row.sender_id,senderName:previous?.senderName || '',senderRole:previous?.senderRole || 'client',createdAt:row.created_at,body:typeof row.deleted_at==='string'?'':row.body,attachmentUrl:typeof row.deleted_at==='string'?null:typeof row.attachment_url==='string'?row.attachment_url:null,version:Number(row.message_version),messageType:'user',editedAt:typeof row.edited_at==='string'?row.edited_at:null,deletedAt:typeof row.deleted_at==='string'?row.deleted_at:null});
       } else {
         void this.client.cancelQueries({queryKey:this.key('conversations'),exact:true});
-        this.enqueue('conversations');
+        this.communicationChanged();
       }
       return; // Never treat UPDATE as incoming communication or mark receipts read.
     }
@@ -241,8 +241,22 @@ export class RealtimeSync {
     void this.client.cancelQueries({queryKey:key,exact:true});
     void this.client.cancelQueries({queryKey:this.key('conversations'),exact:true});
     this.client.setQueryData<MessagePages>(key,current=>updateMessage(current,message));
-    this.client.setQueryData<Inventory>(this.key('conversations'),current=>current && {...current,threads:current.threads.map(t=>t.kind===kind && t.resourceId===id && t.lastMessageAt===message.createdAt?{...t,preview:message.deletedAt?DELETED_MESSAGE:message.body}:t)});
+    this.client.setQueryData<Inventory>(this.key('conversations'),current=>current && this.reconcileInventory(current));
+    if (message.deletedAt) this.enqueue('unread');
     this.enqueue('conversations');
+  }
+
+  // Apply known revisions to late inventory responses as well as histories.
+  // Never add a thread here: hidden inboxes stay hidden until a genuine INSERT.
+  reconcileInventory<T extends {threads: MessageWorkspaceThread[]}>(data: T): T {
+    return {...data,threads:data.threads.map(thread=>{
+      const revisions=[...this.revisions.entries()].filter(([key])=>key.startsWith(thread.kind+':'+thread.resourceId+':')).map(([,value])=>value);
+      const revision=revisions.find(row=>row.createdAt===thread.lastMessageAt);
+      if (!revision) return thread;
+      if (!revision.deletedAt) return {...thread,preview:revision.body};
+      const remaining=visibleMessages(this.client.getQueryData<MessagePages>(queryKeys.messages(this.identity,thread.kind,thread.resourceId))).filter(row=>!row.id.startsWith('pending-')).at(-1);
+      return {...thread,preview:remaining?.body || null,senderName:remaining?.senderName || null,lastMessageAt:remaining?.createdAt || null};
+    })};
   }
 
   private rememberRevision(kind: string, id: string, message: ConversationMessage) {
@@ -263,6 +277,9 @@ export class RealtimeSync {
   }
 
   private applyMessage(kind: string, id: string, message: ConversationMessage) {
+    const revision=this.revisions.get(`${kind}:${id}:${message.id}`);
+    if (revision) message=newestMessage(revision,message);
+    if (message.deletedAt) return;
     const key = queryKeys.messages(this.identity,kind,id);
     if (this.client.getQueryData(key)) {
       // Prevent an older in-flight history response from replacing this event.

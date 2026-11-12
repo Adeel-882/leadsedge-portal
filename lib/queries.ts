@@ -1,3 +1,4 @@
+import { visibleActivity } from './message-visibility';
 import { inboxRemovalEnabled, visibilityKeys } from './inbox-visibility';
 import { sanitizeTaskDescription } from './rich-text';
 export { sanitizeTaskDescription } from './rich-text';
@@ -206,18 +207,35 @@ const MESSAGE_PAGE_SIZE = 50;
 // Unread counts never come from this sample; they come from read receipts.
 const CONVERSATION_ACTIVITY_SAMPLE = 400;
 
+
+async function resolveActivity<T extends {body:string;created_at:string;deleted_at?:string|null;sender?:unknown}>(
+  supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>,
+  kind: 'project' | 'task', rows: T[], key: (row:T)=>string,
+): Promise<T[]> {
+  const selection = kind === 'project'
+    ? 'project_id,body,created_at,deleted_at,sender:users(full_name),project:projects(project_name)'
+    : 'task_id,body,created_at,deleted_at,sender:users(full_name),task:project_tasks!inner(title,project_id,archived_at,project:projects(project_name))';
+  return visibleActivity(rows,key,async (ids,offset) => {
+    const {data,error}=await supabase.from(kind === 'project' ? 'project_messages' : 'task_messages')
+      .select(selection).in(kind+'_id',ids).eq('message_type','user').is('deleted_at',null)
+      .order('created_at',{ascending:false}).order('id',{ascending:false}).range(offset,offset+CONVERSATION_ACTIVITY_SAMPLE-1);
+    if(error) throw new Error('Unable to load conversation previews.');
+    return (data || []) as unknown as T[];
+  },CONVERSATION_ACTIVITY_SAMPLE);
+}
+
 function mapMessages(rows: Array<{ edited_at?: string | null; deleted_at?: string | null; message_version?: number; message_type?: string; id: string; sender_id: string; body: string; attachment_url: string | null; created_at: string; sender: { full_name: string; role: string } | { full_name: string; role: string }[] | null }>): ConversationMessage[] {
-  return rows.map((row) => {
+  return rows.filter(row => !row.deleted_at).map((row) => {
     const sender = Array.isArray(row.sender) ? row.sender[0] : row.sender;
-    return { id: row.id, senderId: row.sender_id, senderName: sender?.full_name || 'Member', senderRole: sender?.role === 'admin' ? 'admin' : 'client', body: row.deleted_at ? 'This message was deleted.' : row.body, attachmentUrl: row.deleted_at ? null : row.attachment_url, createdAt: row.created_at, editedAt: row.edited_at, deletedAt: row.deleted_at, version: row.message_version, messageType: row.message_type };
+    return { id: row.id, senderId: row.sender_id, senderName: sender?.full_name || 'Member', senderRole: sender?.role === 'admin' ? 'admin' : 'client', body: row.body, attachmentUrl: row.deleted_at ? null : row.attachment_url, createdAt: row.created_at, editedAt: row.edited_at, deletedAt: row.deleted_at, version: row.message_version, messageType: row.message_type };
   });
 }
 
 export async function getTaskMessages(taskId: string, before?: string): Promise<ConversationMessage[]> {
-  if (isDemoMode()) return demoTaskMessages;
+  if (isDemoMode()) return demoTaskMessages.filter(message => !message.deletedAt);
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
-  let query = supabase.from('task_messages').select('id,sender_id,body,attachment_url,created_at,edited_at,deleted_at,message_version,message_type,sender:users(full_name,role)').eq('task_id', taskId).eq('message_type', 'user').order('created_at', { ascending: false }).limit(MESSAGE_PAGE_SIZE);
+  let query = supabase.from('task_messages').select('id,sender_id,body,attachment_url,created_at,edited_at,deleted_at,message_version,message_type,sender:users(full_name,role)').eq('task_id', taskId).eq('message_type', 'user').is('deleted_at', null).order('created_at', { ascending: false }).limit(MESSAGE_PAGE_SIZE);
   if (before) query = query.lt('created_at', before);
   const { data, error } = await query;
   if (error) throw new Error('Unable to load task conversation.');
@@ -225,10 +243,10 @@ export async function getTaskMessages(taskId: string, before?: string): Promise<
 }
 
 export async function getProjectMessages(projectId: string, before?: string): Promise<ConversationMessage[]> {
-  if (isDemoMode()) return demoProjectMessages;
+  if (isDemoMode()) return demoProjectMessages.filter(message => !message.deletedAt);
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
-  let query = supabase.from('project_messages').select('id,sender_id,body,attachment_url,created_at,edited_at,deleted_at,message_version,message_type,sender:users(full_name,role)').eq('project_id', projectId).eq('message_type', 'user').order('created_at', { ascending: false }).limit(MESSAGE_PAGE_SIZE);
+  let query = supabase.from('project_messages').select('id,sender_id,body,attachment_url,created_at,edited_at,deleted_at,message_version,message_type,sender:users(full_name,role)').eq('project_id', projectId).eq('message_type', 'user').is('deleted_at', null).order('created_at', { ascending: false }).limit(MESSAGE_PAGE_SIZE);
   if (before) query = query.lt('created_at', before);
   const { data, error } = await query;
   if (error) throw new Error('Unable to load project conversation.');
@@ -343,15 +361,15 @@ export async function getClientConversationThreads(): Promise<ConversationThread
     getClientProjects(),
     getClientTaskList(),
     supabase.from('message_read_receipts')
-      .select('project_message:project_messages(project_id,message_type),task_message:task_messages(task_id,message_type)')
+      .select('project_message:project_messages(project_id,deleted_at,message_type),task_message:task_messages(task_id,deleted_at,message_type)')
       .is('read_at', null),
     supabase.from('project_messages')
-      .select('project_id,body,created_at,sender:users(full_name),project:projects!inner(project_clients!inner(client:clients!inner()))')
+      .select('project_id,body,created_at,deleted_at,sender:users(full_name),project:projects!inner(project_clients!inner(client:clients!inner()))')
       .eq('project.project_clients.client.auth_user_id', viewer.id)
       .neq('project.project_clients.client.status', 'disabled')
       .eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
     supabase.from('task_messages')
-      .select('task_id,body,created_at,sender:users(full_name),task:project_tasks!inner(assignee:clients!inner())')
+      .select('task_id,body,created_at,deleted_at,sender:users(full_name),task:project_tasks!inner(assignee:clients!inner())')
       .eq('task.assignee.auth_user_id', viewer.id).neq('task.assignee.status', 'disabled')
       .eq('task.client_visible', true).neq('task.status', 'draft').is('task.archived_at', null)
       .eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
@@ -367,9 +385,9 @@ export async function getClientConversationThreads(): Promise<ConversationThread
     const taskMessage = Array.isArray(receipt.task_message) ? receipt.task_message[0] : receipt.task_message;
     // A receipt whose message is null was filtered out by row level security, and
     // a non-user message is not counted by the badge either.
-    if (projectMessage?.project_id && projectMessage.message_type === 'user') {
+    if (projectMessage?.project_id && projectMessage.message_type === 'user' && !projectMessage.deleted_at) {
       unreadByProject.set(projectMessage.project_id, (unreadByProject.get(projectMessage.project_id) || 0) + 1);
-    } else if (taskMessage?.task_id && taskMessage.message_type === 'user') {
+    } else if (taskMessage?.task_id && taskMessage.message_type === 'user' && !taskMessage.deleted_at) {
       unreadByTask.set(taskMessage.task_id, (unreadByTask.get(taskMessage.task_id) || 0) + 1);
     }
   }
@@ -386,8 +404,12 @@ export async function getClientConversationThreads(): Promise<ConversationThread
     }
     return map;
   };
-  const projectLatest = latest(projectActivity.data, (row) => row.project_id);
-  const taskLatest = latest(taskActivity.data as Array<{ task_id: string; body: string; created_at: string; sender?: { full_name: string } | { full_name: string }[] | null }> | null, (row) => row.task_id);
+  const [visibleProjects,visibleTasks] = await Promise.all([
+    resolveActivity(supabase,'project',projectActivity.data || [],row=>row.project_id),
+    resolveActivity(supabase,'task',taskActivity.data || [],row=>row.task_id),
+  ]);
+  const projectLatest = latest(visibleProjects, (row) => row.project_id);
+  const taskLatest = latest(visibleTasks as Array<{ task_id: string; body: string; created_at: string; sender?: { full_name: string } | { full_name: string }[] | null }> | null, (row) => row.task_id);
 
   const projectThreads: ConversationThread[] = projects.map((project) => ({
     kind: 'project',
@@ -456,9 +478,9 @@ export async function getAdminMessageInbox(): Promise<AdminConversationSummary[]
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
   const [projectResult, taskResult, unreadResult, hiddenKeys] = await Promise.all([
-    supabase.from('project_messages').select('project_id,body,created_at,sender:users(full_name),project:projects(project_name)').eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
-    supabase.from('task_messages').select('task_id,body,created_at,sender:users(full_name),task:project_tasks!inner(title,project_id,archived_at,project:projects(project_name))').eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
-    supabase.from('message_read_receipts').select('project_message:project_messages(project_id,message_type,body,created_at,sender:users(full_name),project:projects(project_name)),task_message:task_messages(task_id,message_type,body,created_at,sender:users(full_name),task:project_tasks!inner(title,project_id,archived_at,project:projects(project_name)))').is('read_at', null),
+    supabase.from('project_messages').select('project_id,body,created_at,deleted_at,sender:users(full_name),project:projects(project_name)').eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
+    supabase.from('task_messages').select('task_id,body,created_at,deleted_at,sender:users(full_name),task:project_tasks!inner(title,project_id,archived_at,project:projects(project_name))').eq('message_type', 'user').order('created_at', { ascending: false }).limit(CONVERSATION_ACTIVITY_SAMPLE),
+    supabase.from('message_read_receipts').select('project_message:project_messages(project_id,deleted_at,message_type,body,created_at,sender:users(full_name),project:projects(project_name)),task_message:task_messages(task_id,deleted_at,message_type,body,created_at,sender:users(full_name),task:project_tasks!inner(title,project_id,archived_at,project:projects(project_name)))').is('read_at', null),
     getInboxHiddenKeys(),
   ]);
   if (projectResult.error || taskResult.error || unreadResult.error) throw new Error('Unable to load message inbox.');
@@ -469,7 +491,7 @@ export async function getAdminMessageInbox(): Promise<AdminConversationSummary[]
   for (const receipt of unreadResult.data || []) {
     const projectMessage = Array.isArray(receipt.project_message) ? receipt.project_message[0] : receipt.project_message;
     const taskMessage = Array.isArray(receipt.task_message) ? receipt.task_message[0] : receipt.task_message;
-    if (projectMessage?.project_id && projectMessage.message_type === 'user') {
+    if (projectMessage?.project_id && projectMessage.message_type === 'user' && !projectMessage.deleted_at) {
       projectUnreadCounts.set(projectMessage.project_id, (projectUnreadCounts.get(projectMessage.project_id) || 0) + 1);
       const current = unreadProjectLatest.get(projectMessage.project_id);
       if (!current || Date.parse(projectMessage.created_at) > Date.parse(current.lastMessageAt)) {
@@ -477,7 +499,7 @@ export async function getAdminMessageInbox(): Promise<AdminConversationSummary[]
         const project = Array.isArray(projectMessage.project) ? projectMessage.project[0] : projectMessage.project;
         unreadProjectLatest.set(projectMessage.project_id, { kind: 'project', resourceId: projectMessage.project_id, projectId: projectMessage.project_id, projectName: project?.project_name || 'Project', taskTitle: null, senderName: sender?.full_name || 'Member', preview: projectMessage.body, lastMessageAt: projectMessage.created_at, unreadCount: 0, href: `/admin/projects/${projectMessage.project_id}/chat` });
       }
-    } else if (taskMessage?.task_id && taskMessage.message_type === 'user') {
+    } else if (taskMessage?.task_id && taskMessage.message_type === 'user' && !taskMessage.deleted_at) {
       taskUnreadCounts.set(taskMessage.task_id, (taskUnreadCounts.get(taskMessage.task_id) || 0) + 1);
       const task = Array.isArray(taskMessage.task) ? taskMessage.task[0] : taskMessage.task;
       if (task && !task.archived_at) {
@@ -490,15 +512,19 @@ export async function getAdminMessageInbox(): Promise<AdminConversationSummary[]
       }
     }
   }
+  const [visibleProjects,visibleTasks] = await Promise.all([
+    resolveActivity(supabase,'project',projectResult.data || [],row=>row.project_id),
+    resolveActivity(supabase,'task',taskResult.data || [],row=>row.task_id),
+  ]);
   const items = new Map<string, AdminConversationSummary>();
-  for (const row of projectResult.data || []) {
+  for (const row of visibleProjects) {
     const key = `project:${row.project_id}`;
     if (items.has(key)) continue;
     const sender = Array.isArray(row.sender) ? row.sender[0] : row.sender;
     const project = Array.isArray(row.project) ? row.project[0] : row.project;
     items.set(key, { kind: 'project', resourceId: row.project_id, projectId: row.project_id, projectName: project?.project_name || 'Project', taskTitle: null, senderName: sender?.full_name || 'Member', preview: row.body, lastMessageAt: row.created_at, unreadCount: projectUnreadCounts.get(row.project_id) || 0, href: `/admin/projects/${row.project_id}/chat` });
   }
-  for (const row of taskResult.data || []) {
+  for (const row of visibleTasks) {
     const key = `task:${row.task_id}`;
     if (items.has(key)) continue;
     const sender = Array.isArray(row.sender) ? row.sender[0] : row.sender;
@@ -512,5 +538,5 @@ export async function getAdminMessageInbox(): Promise<AdminConversationSummary[]
     if (!items.has(key)) items.set(key, { ...summary, unreadCount: summary.kind === 'project' ? projectUnreadCounts.get(summary.resourceId) || 0 : taskUnreadCounts.get(summary.resourceId) || 0 });
   }
   const hidden = new Set(hiddenKeys);
-  return [...items.values()].filter(item => !hidden.has(`${item.kind}:${item.resourceId}`)).sort((a, b) => Number(b.unreadCount > 0) - Number(a.unreadCount > 0) || Date.parse(b.lastMessageAt) - Date.parse(a.lastMessageAt));
+  return [...items.values()].filter(item => !hidden.has(`${item.kind}:${item.resourceId}`)).sort((a, b) => Number(b.unreadCount > 0) - Number(a.unreadCount > 0) || (Date.parse(b.lastMessageAt) || 0) - (Date.parse(a.lastMessageAt) || 0));
 }

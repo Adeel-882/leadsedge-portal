@@ -1,4 +1,5 @@
 'use client';
+import { useRealtimeSync } from './realtime-provider';
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCacheIdentity } from './query-provider';
@@ -10,11 +11,12 @@ export function screenUrl(role: string, screen: string, args: string[] = []) {
   return '/api/data/' + role + '/' + screen + (params.size ? '?' + params : '');
 }
 export function CachedScreen<K extends ScreenName>({ screen, args = [], initial, children }: { screen: K; args?: string[]; initial?: { data: ScreenData<K>; updatedAt: number }; children: (data: ScreenData<K>) => React.ReactNode }) {
+  const sync = useRealtimeSync();
   const identity = useCacheIdentity();
   const client = useQueryClient();
   const query = useQuery({ queryKey: queryKeys.data(identity, screen, ...args), queryFn: async ({ signal }) => {
     const data = await readJson<ScreenData<K>>(screenUrl(identity.role, screen, args), identity, signal);
-    return screen === 'conversations' ? retainOpenProjectThreads(data as ScreenData<'conversations'>, client.getQueryData(queryKeys.data(identity,screen))) as ScreenData<K> : data;
+    return screen === 'conversations' ? sync.reconcileInventory(retainOpenProjectThreads(data as ScreenData<'conversations'>, client.getQueryData(queryKeys.data(identity,screen)))) as ScreenData<K> : data;
   }, ...freshness(screen), initialData: initial?.data, initialDataUpdatedAt: initial?.updatedAt });
   const denied = query.error instanceof DataError && [401,403,404].includes(query.error.status);
   useEffect(() => { if (denied) client.removeQueries({ queryKey: queryKeys.scope(identity), type: 'inactive' }); }, [client, denied, identity]);

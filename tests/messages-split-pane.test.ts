@@ -48,8 +48,8 @@ describe('shared split-pane Messages experience', () => {
     expect(conversation).toContain('Load earlier messages');
     expect(conversation).toContain('?before=');
     expect(queries).toContain('.limit(CONVERSATION_ACTIVITY_SAMPLE)');
-    expect(queries).toContain("project_message:project_messages(project_id,message_type,body,created_at");
-    expect(queries).toContain("task_message:task_messages(task_id,message_type,body,created_at");
+    expect(queries).toContain("project_message:project_messages(project_id,deleted_at,message_type,body,created_at");
+    expect(queries).toContain("task_message:task_messages(task_id,deleted_at,message_type,body,created_at");
     expect(queries).toContain('unreadProjectLatest');
     expect(queries).toContain('unreadTaskLatest');
   });

@@ -18,12 +18,19 @@ export function appendMessage(data: MessagePages | undefined, message: Conversat
   return { pages, pageParams: pages.map((_page, index) => index === 0 ? null : pages[index - 1].messages[0]?.createdAt) };
 }
 // Reconnect fetches only the newest page and keeps retained older data and pending sends.
-export function mergeNewest(data: MessagePages | undefined, newest: MessagePage) {
+export function mergeNewest(data: MessagePages | undefined, newest: MessagePage, observed: MessagePages | undefined = data) {
   const previousNewest = flattenMessages(data).filter(message=>!message.id.startsWith('pending-')).at(-1);
-  let merged = data;
+  // The newest response is authoritative for its covered range. Missing rows
+  // were deleted while disconnected; merging only returned rows resurrects them.
+  const oldest = newest.messages[0]?.createdAt;
+  const ids = new Set(newest.messages.map(message => message.id));
+  const observedIds = new Set(flattenMessages(observed).map(message => message.id));
+  let merged = data && {...data, pages: data.pages.map(page => ({...page, messages: page.messages.filter(message =>
+    message.id.startsWith('pending-') || message.deletedAt || !observedIds.has(message.id) || ids.has(message.id) || (newest.hasMore && oldest && message.createdAt < oldest)
+  )}))};
   for (const message of newest.messages) merged = appendMessage(merged, message);
   if (!merged) return {pages:[newest],pageParams:[null]};
-  const pages=merged.pages.map((page,index)=>index===merged.pages.length-1?{...page,hasMore:page.hasMore || newest.hasMore}:page);
+  const pages=merged.pages.map((page,index)=>index===merged.pages.length-1?{...page,hasMore:newest.hasMore && (page.hasMore || newest.hasMore)}:page);
   // More than one page may have arrived while disconnected. Keep cached earlier
   // pages, but make the missing interval explicitly loadable before older history.
   if(previousNewest && newest.hasMore && newest.messages[0]?.createdAt>previousNewest.createdAt) pages[0]={...pages[0],gap:{before:newest.messages[0].createdAt,until:previousNewest.createdAt}};
@@ -53,4 +60,9 @@ export function reconcileMessagePages(old: MessagePages | undefined, next: Messa
 }
 export function updateMessage(data: MessagePages | undefined, message: ConversationMessage) {
   return data && {...data, pages: data.pages.map(page => ({...page, messages: page.messages.map(item => item.id === message.id ? newestMessage(item, message) : item)}))};
+}
+
+// Keep tombstones internally for revision conflict protection, never for display.
+export function visibleMessages(data?: MessagePages) {
+  return flattenMessages(data).filter(message => !message.deletedAt);
 }

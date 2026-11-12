@@ -33,7 +33,7 @@ function builder(table: string) {
       return Promise.resolve(table === 'projects' ? mocks.projectGate : undefined).then(() => ({ data: mocks.tables[table] || [], error: null })).then(resolve);
     },
   };
-  for (const method of ['select', 'eq', 'neq', 'is', 'in', 'order', 'limit', 'not', 'lt', 'maybeSingle', 'single']) {
+  for (const method of ['select', 'eq', 'neq', 'is', 'in', 'order', 'limit', 'range', 'not', 'lt', 'maybeSingle', 'single']) {
     chain[method] = (...args: unknown[]) => {
       mocks.calls.push({ table, method, args });
       return chain;
@@ -224,6 +224,20 @@ describe('client conversation threads', () => {
     expect(taskThreads.map((thread) => thread.id)).toEqual([T1, T2]);
   });
 
+  it('excludes deleted receipts and falls back to the previous visible preview',async()=>{
+    mocks.tables.message_read_receipts=[{project_message:{project_id:P1,message_type:'user',deleted_at:'now'},task_message:null},projectReceipt(P1),{project_message:null,task_message:{task_id:T1,message_type:'user',deleted_at:'now'}},taskReceipt(T1)];
+    mocks.tables.project_messages[0].deleted_at='now';
+    const threads=await getClientConversationThreads();
+    expect(threads.find(t=>t.id===P1)).toMatchObject({unreadCount:1,lastMessagePreview:'Older in project one'});
+    expect(threads.find(t=>t.id===T1)?.unreadCount).toBe(1);
+  });
+  it('retains a task conversation when its only message was deleted',async()=>{
+    mocks.tables.task_messages=[{task_id:T1,body:'Deleted secret',deleted_at:'now',created_at:'2026-01-01'}];
+    mocks.tables.message_read_receipts=[];
+    const threads=await getClientConversationThreads();
+    expect(threads.find(t=>t.id===T1)).toMatchObject({lastMessagePreview:null,lastMessageAt:null,unreadCount:0});
+    expect(JSON.stringify(threads)).not.toContain('Deleted secret');
+  });
   it('scopes both project and task reads to the authenticated client', async () => {
     await getClientConversationThreads();
     const args = JSON.stringify(mocks.calls);
