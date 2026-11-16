@@ -22,7 +22,7 @@
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
     "@tanstack/react-query": "^5.104.0",
-    "next": "^16.3.3",
+    "next": "16.4.6",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "resend": "^6.24.0",
@@ -48,7 +48,7 @@
   },
   "type": "module",
   "allowScripts": {
-    "sharp@0.35.4": true,
+    "sharp@0.35.5": true,
     "unrs-resolver@1.12.2": true
   }
 }
