@@ -255,7 +255,7 @@ export async function sendPortalInvitation({ to, clientName, actionLink }: { to:
                           color:#8F8F8A;
                         "
                       >
-                        This invitation is private and expires automatically.
+                        Your secure access link is available for 24 hours from the time it is issued. If you miss this window, our LeadsEdge support team will be happy to assist you with a new invitation.
                         For your security, the invitation link can only be used once.
                       </p>
 

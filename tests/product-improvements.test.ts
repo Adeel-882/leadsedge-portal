@@ -20,7 +20,9 @@ it('invites the full client name to the product and preserves the secure URL', a
   expect(payload.html).toContain('Welcome to LeadsEdge Portal');
   expect(payload.html).not.toContain('<strong>Zack</strong>');
   expect(payload.html).toContain(link.replaceAll('&', '&amp;'));
-  expect(payload.html).toContain('This invitation is private and expires automatically.');
+  expect(payload.html).toContain('Your secure access link is available for 24 hours from the time it is issued. If you miss this window, our LeadsEdge support team will be happy to assist you with a new invitation.');
+  expect(payload.html).toContain('For your security, the invitation link can only be used once.');
+  expect(payload.html).not.toContain('This invitation is private and expires automatically.');
 });
 it('passes the stable delivery key to the existing provider', async () => {
   await sendBrandedEmail({ to: 'x@example.com', subject: 'Assignment', heading: 'Lead', body: 'Details', actionLabel: 'View Lead', actionLink: 'https://example.com', idempotencyKey: 'assignment/123' });

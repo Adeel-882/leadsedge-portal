@@ -73,3 +73,11 @@ it('keeps all seven HTML designs consistent with contracts and the actual logo',
     for (const color of ['#FF4134', '#070707', '#111111', '#FFFFFF', '#A7A7A2', '#262626']) expect(html).toContain(color);
   }
 });
+it('keeps the hosted invitation source and preview wording aligned with the application', () => {
+  for (const path of ['docs/resend-templates/client-invitation.html', 'docs/resend-templates/previews/client-invitation.html']) {
+    const html = readFileSync(path, 'utf8');
+    expect(html).toContain('Your secure access link is available for 24 hours from the time it is issued. If you miss this window, our LeadsEdge support team will be happy to assist you with a new invitation.');
+    expect(html).toContain('For your security, the invitation link can only be used once.');
+    expect(html).not.toContain('expires automatically');
+  }
+});
