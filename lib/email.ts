@@ -227,9 +227,9 @@ export async function sendPortalInvitation({ to, clientName, actionLink }: { to:
               </td>
             </tr>
 
-            <!-- SECURITY NOTE -->
+            <!-- Important: 24-Hour Invitation Expiry Notice -->
             <tr>
-              <td style="padding:12px 38px 6px;">
+              <td style="padding:12px 38px 20px;">
 
                 <table
                   role="presentation"
@@ -238,26 +238,32 @@ export async function sendPortalInvitation({ to, clientName, actionLink }: { to:
                   cellpadding="0"
                   border="0"
                   style="
-                    background:#171717;
-                    border:1px solid #262626;
-                    border-radius:10px;
+                    background:#191414;
+                    border:2px solid #FF4134;
+                    border-radius:12px;
                   "
                 >
                   <tr>
-                    <td style="padding:15px 17px;">
+                    <td style="padding:22px 24px;">
+
+                      <p style="margin:0 0 14px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;font-weight:800;letter-spacing:0.4px;color:#FF4134;">
+                        IMPORTANT: YOUR LINK EXPIRES IN 24 HOURS
+                      </p>
 
                       <p
                         style="
                           margin:0;
                           font-family:Arial,Helvetica,sans-serif;
-                          font-size:13px;
-                          line-height:21px;
-                          color:#8F8F8A;
+                          font-size:17px;
+                          line-height:27px;
+                          font-weight:500;
+                          color:#FFFFFF;
                         "
                       >
                         Your secure access link is available for 24 hours from the time it is issued. If you miss this window, our LeadsEdge support team will be happy to assist you with a new invitation.
-                        For your security, the invitation link can only be used once.
                       </p>
+
+                      <p style="margin:14px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:21px;color:#A7A7A2;">For your security, the invitation link can only be used once.</p>
 
                     </td>
                   </tr>

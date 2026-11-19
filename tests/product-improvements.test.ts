@@ -23,6 +23,9 @@ it('invites the full client name to the product and preserves the secure URL', a
   expect(payload.html).toContain('Your secure access link is available for 24 hours from the time it is issued. If you miss this window, our LeadsEdge support team will be happy to assist you with a new invitation.');
   expect(payload.html).toContain('For your security, the invitation link can only be used once.');
   expect(payload.html).not.toContain('This invitation is private and expires automatically.');
+  const notice = payload.html.split('<!-- Important: 24-Hour Invitation Expiry Notice -->')[1].split('<!-- FOOTER -->')[0];
+  expect(notice).toContain('IMPORTANT: YOUR LINK EXPIRES IN 24 HOURS');
+  for (const style of ['font-size:17px', 'line-height:27px', 'border:2px solid #FF4134', 'background:#191414']) expect(notice).toContain(style);
 });
 it('passes the stable delivery key to the existing provider', async () => {
   await sendBrandedEmail({ to: 'x@example.com', subject: 'Assignment', heading: 'Lead', body: 'Details', actionLabel: 'View Lead', actionLink: 'https://example.com', idempotencyKey: 'assignment/123' });

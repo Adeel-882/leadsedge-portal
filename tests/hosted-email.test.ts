@@ -79,5 +79,7 @@ it('keeps the hosted invitation source and preview wording aligned with the appl
     expect(html).toContain('Your secure access link is available for 24 hours from the time it is issued. If you miss this window, our LeadsEdge support team will be happy to assist you with a new invitation.');
     expect(html).toContain('For your security, the invitation link can only be used once.');
     expect(html).not.toContain('expires automatically');
+    expect(html).toContain('IMPORTANT: YOUR LINK EXPIRES IN 24 HOURS');
+    for (const style of ['font-size:17px', 'line-height:27px', 'border:2px solid #FF4134', 'background:#191414']) expect(html).toContain(style);
   }
 });
