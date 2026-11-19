@@ -14,7 +14,9 @@ describe('client invitation resend control', () => {
   });
 
   it('uses the server-compatible TokenHash URL and never the implicit action link', () => {
-    expect(route).toContain("buildPortalConfirmationUrl({ tokenHash: linkData.properties.hashed_token, type: 'magiclink' })");
+    expect(route).toContain('sendTrackedClientInvitation');
+    expect(route).toContain("tokenHash: linkData.properties.hashed_token, type: 'magiclink'");
+    expect(readFileSync('lib/client-invitation-tracking.ts', 'utf8')).toContain('buildPortalConfirmationUrl({ tokenHash: input.tokenHash, type: input.type })');
     expect(route).not.toContain('properties.action_link');
     expect(route).not.toContain('#access_token');
     expect(route).not.toMatch(/console\.(log|info|debug)/);

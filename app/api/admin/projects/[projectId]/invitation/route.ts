@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import { requireApiRole } from '@/lib/auth';
-import { sendPortalInvitation } from '@/lib/email';
+import { sendTrackedClientInvitation } from '@/lib/client-invitation-tracking';
 import { appUrl, isDemoMode } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { buildPortalConfirmationUrl } from '@/lib/auth-flow';
 
 export async function POST(_request: Request, { params }: { params: Promise<{ projectId: string }> }) {
   const viewer = await requireApiRole('admin');
@@ -29,13 +28,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ pr
     return NextResponse.json({ error: "The linked authentication account does not match this client's email." }, { status: 409 });
   }
 
+  const issuedAt = new Date().toISOString();
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({ type: 'magiclink', email: client.email, options: { redirectTo: `${appUrl()}/portal` } });
   if (linkError || !linkData.properties?.hashed_token || linkData.user.id !== client.auth_user_id) {
     return NextResponse.json({ error: 'A secure invitation link could not be generated for the linked client account.' }, { status: 500 });
   }
-  const actionLink = buildPortalConfirmationUrl({ tokenHash: linkData.properties.hashed_token, type: 'magiclink' });
-  const delivery = await sendPortalInvitation({ to: client.email, clientName: client.full_name, projectName: project.project_name, actionLink });
-  await admin.from('email_deliveries').insert({ client_id: client.id, project_id: projectId, email_type: 'client_invitation', provider_id: delivery.ok ? delivery.id : null, status: delivery.ok ? 'sent' : 'failed', error_message: delivery.ok ? null : delivery.error });
-  if (!delivery.ok) return NextResponse.json({ error: 'Invitation could not be sent. Please try again.' }, { status: 502 });
+  const delivery = await sendTrackedClientInvitation({ admin, clientId: client.id, projectId, authUserId: client.auth_user_id,
+    tokenHash: linkData.properties.hashed_token, type: 'magiclink', issuedAt, to: client.email, clientName: client.full_name, projectName: project.project_name });
+  if (!delivery.ok) return NextResponse.json({ error: delivery.error || 'Invitation could not be sent. Please try again.' }, { status: 502 });
   return NextResponse.json({ message: `Invitation sent to ${client.email}`, sentAt: new Date().toISOString() });
 }

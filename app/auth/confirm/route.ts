@@ -5,6 +5,7 @@ import { resolveRequestOrigin } from '@/lib/request-origin';
 import { createResponseBoundSupabaseClient } from '@/lib/supabase/response-bound';
 import { externalRequestUrl } from '@/lib/app-origin';
 import { administratorInvitationId } from '@/lib/administrator-invitations';
+import { recordClientInvitationSignIn } from '@/lib/client-invitation-tracking';
 
 const confirmationCookie = 'leadsedge_auth_confirmation';
 const confirmationLifetimeSeconds = 10 * 60;
@@ -392,6 +393,10 @@ export async function POST(request: NextRequest) {
   if (!completion.ok) {
     logConfirmation('POST_AUTHORIZATION_DENIED', { authorizationStage: completion.stage, code: completion.code });
     return clearConfirmationCookie(attachCookies(errorRedirect(url, completion.reason)), url);
+  }
+
+  if (completion.role === 'client' && state.credential.kind === 'token_hash') {
+    await recordClientInvitationSignIn(verification.user.id, state.credential.tokenHash, state.credential.type);
   }
 
   const destination = administratorInvitationId(state.next) ? '/admin' : state.next;

@@ -33,13 +33,14 @@ export function InviteButton({ projectId }: { projectId: string }) {
       const result = await resendProjectInvitation(projectId);
       setMessage('Invitation sent just now');
       setToast({ message: result.message, tone: 'success' });
-      router.refresh();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Invitation could not be sent. Please try again.';
       setMessage(errorMessage);
       setToast({ message: errorMessage, tone: 'error' });
     } finally {
       setSending(false);
+      // A rejected delivery is also a new attempt; refresh its status as well.
+      router.refresh();
     }
   }
 

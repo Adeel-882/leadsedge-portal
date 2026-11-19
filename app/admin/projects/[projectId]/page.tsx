@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
+import { ClientInvitationStatus } from '@/components/admin/client-invitation-status';
 import { notFound } from 'next/navigation';
 import { ArrowRight, CalendarBlank, CheckSquare, User } from '@phosphor-icons/react/dist/ssr';
 import { ProjectActivity } from '@/components/admin/project-activity';
@@ -8,17 +10,14 @@ import { StatusBadge } from '@/components/status-badge';
 import { formatDate } from '@/lib/format';
 import { getUpcomingProjectMeetings } from '@/lib/meetings';
 import { getProject, getProjectClients, getProjectTasks } from '@/lib/queries';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export default async function ProjectOverviewPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  const supabase = await createSupabaseServerClient();
-  const [projectResult, tasksResult, clientsResult, meetingsResult, invitationsResult] = await Promise.allSettled([
+  const [projectResult, tasksResult, clientsResult, meetingsResult] = await Promise.allSettled([
     getProject(projectId),
     getProjectTasks(projectId),
     getProjectClients(projectId),
     getUpcomingProjectMeetings(projectId),
-    supabase ? supabase.from('email_deliveries').select('client_id,status,created_at').eq('project_id', projectId).eq('email_type', 'client_invitation').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
   ]);
   const project = projectResult.status === 'fulfilled' ? projectResult.value : null;
   if (!project) notFound();
@@ -27,8 +26,6 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
 
   const primaryClient = clients[0];
   const meetings = meetingsResult.status === 'fulfilled' ? meetingsResult.value : [];
-  const invitationRows = invitationsResult.status === 'fulfilled' ? invitationsResult.value.data || [] : [];
-  const invitation = invitationRows.find((item) => item.client_id === (primaryClient?.id || project.clientId)) || null;
 
   return <div className="page-wrap">
     <div className="page-header">
@@ -63,7 +60,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
         <p className="mt-1 break-all text-sm text-muted">{primaryClient?.email || 'No email available'}</p>
         <div className="mt-4 border-t border-line pt-4">
           <p className="text-[11px] font-semibold text-muted">Invitation status:</p>
-          {invitation ? <p className={`mt-1 text-xs font-semibold ${invitation.status === 'sent' ? 'text-success' : 'text-danger'}`}>{invitation.status === 'sent' ? 'Sent' : 'Failed'} <span className="font-normal text-muted">on {formatDate(invitation.created_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span></p> : <p className="mt-1 text-xs text-muted">No delivery status available</p>}
+          <Suspense fallback={<p className="mt-2 text-xs text-muted" role="status">Loading invitation status…</p>}><ClientInvitationStatus projectId={projectId} clientId={primaryClient?.id || project.clientId} /></Suspense>
           {primaryClient && <InviteButton projectId={project.id} />}
         </div>
       </aside>

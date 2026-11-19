@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   verifyOtp: vi.fn(),
   exchangeCodeForSession: vi.fn(),
   signOut: vi.fn(),
+  recordSignIn: vi.fn(),
   activateCurrentClient: vi.fn(),
   profileRole: 'client' as 'admin' | 'client' | null,
   client: { id: 'client-fixture' } as { id: string } | null,
@@ -26,6 +27,7 @@ vi.mock('@/lib/env', async (importOriginal) => ({
 vi.mock('@supabase/ssr', () => ({
   createServerClient: mocks.createServerClient,
 }));
+vi.mock('@/lib/client-invitation-tracking', () => ({ recordClientInvitationSignIn: mocks.recordSignIn }));
 
 import { GET, POST } from '@/app/auth/confirm/route';
 
@@ -219,6 +221,39 @@ describe('scanner-resistant TokenHash confirmation', () => {
     });
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://project.example.test';
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'publishable-test-key';
+  });
+
+  it('does not track repeated/scanner GETs, and tracks only the verified authorized POST', async () => {
+    const { cookie, nonce } = await preparedConfirmation({ type: 'invite' });
+    await GET(confirmationRequest({ type: 'invite', cookie }));
+    expect(mocks.recordSignIn).not.toHaveBeenCalled();
+    await POST(postRequest(cookie, nonce));
+    expect(mocks.recordSignIn).toHaveBeenCalledExactlyOnceWith('user-fixture', tokenHash, 'invite');
+    expect(mocks.recordSignIn.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.membershipEq.mock.invocationCallOrder[0]);
+  });
+
+  it.each(['expired', 'invalid', 'session', 'profile', 'client', 'disabled', 'membership'])(
+    'does not track unsuccessful %s confirmation', async (failure) => {
+      if (failure === 'expired' || failure === 'invalid') mocks.verifyOtp.mockResolvedValueOnce({ data: { user: null, session: null }, error: { code: failure === 'expired' ? 'otp_expired' : 'invalid' } });
+      if (failure === 'session') mocks.verifyOtp.mockResolvedValueOnce({ data: { user: { id: 'user-fixture' }, session: null }, error: null });
+      if (failure === 'profile') mocks.profileRole = null;
+      if (failure === 'client') mocks.client = null;
+      if (failure === 'disabled') mocks.activateCurrentClient.mockResolvedValueOnce({ error: {} });
+      if (failure === 'membership') mocks.memberships = [];
+      const { cookie, nonce } = await preparedConfirmation({ type: 'invite' });
+      await POST(postRequest(cookie, nonce));
+      expect(mocks.recordSignIn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not correlate PKCE or administrator sign-ins with client invitations', async () => {
+    const codeState = await preparedRedirect(`code=${authorizationCode}`);
+    await POST(postRequest(codeState.cookie, codeState.nonce));
+    expect(mocks.recordSignIn).not.toHaveBeenCalled();
+    mocks.profileRole = 'admin';
+    const { cookie, nonce } = await preparedConfirmation();
+    await POST(postRequest(cookie, nonce));
+    expect(mocks.recordSignIn).not.toHaveBeenCalled();
   });
 
   it.each([
