@@ -4,6 +4,7 @@ import { sendTrackedClientInvitation } from '@/lib/client-invitation-tracking';
 import { appUrl, isDemoMode } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { invitationTrackingReady } from '@/lib/project-creation-readiness';
 
 export async function POST(_request: Request, { params }: { params: Promise<{ projectId: string }> }) {
   const viewer = await requireApiRole('admin');
@@ -28,6 +29,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ pr
     return NextResponse.json({ error: "The linked authentication account does not match this client's email." }, { status: 409 });
   }
 
+  if (!await invitationTrackingReady(admin)) return NextResponse.json({ error: 'Invitation delivery is temporarily unavailable because its database setup is incomplete. No new sign-in link or email was generated.' }, { status: 503 });
   const issuedAt = new Date().toISOString();
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({ type: 'magiclink', email: client.email, options: { redirectTo: `${appUrl()}/portal` } });
   if (linkError || !linkData.properties?.hashed_token || linkData.user.id !== client.auth_user_id) {

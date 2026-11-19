@@ -34,7 +34,7 @@ export async function sendTrackedClientInvitation(input: SendInput) {
     if (error || typeof data !== 'string') throw new Error('Unavailable');
     attemptId = data;
   } catch {
-    return { ok: false as const, error: 'Invitation tracking is unavailable. No email was sent. Please retry after configuration is restored.' };
+    return { ok: false as const, deliveryState: 'not_sent' as const, error: 'Invitation tracking is unavailable. No email was sent. Please retry after configuration is restored.' };
   }
   let delivery: Awaited<ReturnType<typeof sendPortalInvitation>>;
   try {
@@ -42,7 +42,7 @@ export async function sendTrackedClientInvitation(input: SendInput) {
       actionLink: buildPortalConfirmationUrl({ tokenHash: input.tokenHash, type: input.type }) });
   } catch {
     // A transport failure is ambiguous: never claim failed delivery or retry automatically.
-    return { ok: false as const, error: 'Invitation delivery could not be confirmed. Check email history before retrying.' };
+    return { ok: false as const, deliveryState: 'unknown' as const, error: 'Invitation delivery could not be confirmed. Check email history before retrying.' };
   }
   try {
     const { error: historyError } = await admin.rpc('finish_client_invitation_delivery', {
@@ -50,9 +50,9 @@ export async function sendTrackedClientInvitation(input: SendInput) {
     });
     if (historyError) throw new Error('Unavailable');
   } catch {
-    return { ok: false as const, error: 'Invitation delivery status could not be saved. Check email history before retrying.' };
+    return { ok: false as const, deliveryState: delivery.ok ? 'sent' as const : 'not_sent' as const, error: 'Invitation delivery status could not be saved. Check email history before retrying.' };
   }
-  return delivery.ok ? delivery : { ok: false as const, error: 'Invitation could not be sent. Please try again.' };
+  return delivery.ok ? delivery : { ok: false as const, deliveryState: 'not_sent' as const, error: 'Invitation could not be sent. Please try again.' };
 }
 
 /** Called only by the verified TokenHash POST, after completeAuthenticatedSession. */

@@ -1,0 +1,64 @@
+// Local synthetic PostgreSQL only; never loads .env or connects to Supabase.
+import fs from 'node:fs';
+import path from 'node:path';
+import {spawnSync,spawn} from 'node:child_process';
+const bin=path.resolve('work/tools/postgresql-17.11/pgsql/bin/psql.exe');
+const database='leadsedge_creation_test_'+Date.now();
+const env={...process.env,PGHOST:'127.0.0.1',PGPORT:'55432',PGUSER:'postgres',PGDATABASE:database,PGPASSWORD:'',PGSSLMODE:'disable',PGCONNECT_TIMEOUT:'3'};
+function run(sql,db=database){const r=spawnSync(bin,['-X','-w','-A','-t','-v','ON_ERROR_STOP=1'],{env:{...env,PGDATABASE:db},input:sql,encoding:'utf8',timeout:30000});if(r.status!==0)throw Error(r.stderr||r.error?.message);return r.stdout.trim().split('\n').at(-1);}
+function concurrent(sql){return new Promise((resolve,reject)=>{const c=spawn(bin,['-X','-w','-A','-t','-v','ON_ERROR_STOP=1'],{env,stdio:['pipe','pipe','pipe']});let out='',err='';c.stdout.on('data',b=>out+=b);c.stderr.on('data',b=>err+=b);c.on('error',reject);c.on('exit',n=>n?reject(Error(err)):resolve(out.trim().split('\n').at(-1)));c.stdin.end(sql);});}
+const id=n=>`10000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const A=id(1),U=id(2),C=id(3),K=id(4),B=id(5),H='a'.repeat(64);
+const auth=u=>`set role authenticated;set request.jwt.claim.sub='${u}';`;
+const claim=(u=A,hash=H)=>auth(u)+`select public.claim_project_creation('${K}','${hash}');`;
+const bundle=()=>auth(A)+`select row_to_json(r) from public.create_project_bundle_once('${K}','${H}','Synthetic project','${U}','Synthetic Client','client@example.test',null) r;`;
+const assert=(ok,msg)=>{if(!ok)throw Error(msg);console.log('PASS: '+msg);};
+const denied=(sql,msg)=>{let fail=false;try{run(sql);}catch{fail=true;}assert(fail,msg);};
+run(`create database ${database}`,'postgres');
+try{
+ run(`create schema auth;create publication supabase_realtime;
+ do $$begin create role anon nologin;exception when duplicate_object then null;end$$;
+ do $$begin create role authenticated nologin;exception when duplicate_object then null;end$$;
+ do $$begin create role service_role nologin bypassrls;exception when duplicate_object then null;end$$;
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}');grant usage on schema public,auth to authenticated,service_role,anon;`);
+ run(fs.readFileSync('supabase/migrations/202608260001_phase1.sql','utf8'));
+ run(`grant all on all tables in schema public to authenticated,service_role;
+ insert into auth.users(id,email) values('${A}','admin@example.test'),('${B}','other-admin@example.test'),('${U}','client@example.test');update public.users set role='admin' where id in ('${A}','${B}');
+ insert into public.clients(id,auth_user_id,full_name,email,status) values('${C}','${U}','Synthetic Client','client@example.test','active');`);
+ const before=run("select md5(string_agg(row_to_json(c)::text,'' order by id)) from public.clients c;");
+ const authBefore=run("select md5(string_agg(row_to_json(a)::text,'' order by id)) from auth.users a;");
+ run(fs.readFileSync('supabase/migrations/202611190002_project_creation_idempotency.sql','utf8'));
+ assert(run(auth(A)+'select public.project_creation_readiness();')==='f','missing tracking infrastructure fails readiness');
+ denied(claim(),'cannot reserve a request with missing prerequisites');
+ run(fs.readFileSync('supabase/migrations/202611190001_client_invitation_tracking.sql','utf8'));
+ assert(run(auth(A)+'select public.project_creation_readiness();')==='t','complete schema passes readiness');
+ assert(run("select md5(string_agg(row_to_json(c)::text,'' order by id)) from public.clients c;")===before,'both migrations preserve existing client rows');
+ denied(claim(U),'ordinary client cannot claim creation');
+ const claims=await Promise.all([concurrent(claim()),concurrent(claim()),concurrent(claim())]);
+ assert(claims.map(JSON.parse).filter(x=>x.acquired).length===1,'concurrent identical requests have exactly one provisioning owner');
+ denied(claim(A,'b'.repeat(64)),'changed payload cannot reuse key');
+ const created=await Promise.all([concurrent(bundle()),concurrent(bundle()),concurrent(bundle())]);
+ const ids=created.map(s=>JSON.parse(s).project_id);
+ assert(new Set(ids).size===1,'concurrent bundle calls commit the same project');
+ assert(run('select count(*) from public.projects;')==='1','exactly one project');
+ assert(run('select count(*) from public.project_clients;')==='1','exactly one membership');
+ assert(run('select count(*) from public.project_threads;')==='1','exactly one normal project thread');
+ assert(run('select count(*) from public.notifications;')==='1','exactly one original invitation notification');
+ assert(run('select count(*) from public.clients;')==='1','existing client is not duplicated');
+ assert(run("select md5(string_agg(row_to_json(a)::text,'' order by id)) from auth.users a;")===authBefore,'Auth identities unchanged');
+ const replay=JSON.parse(run(claim()));assert(!replay.acquired&&replay.projectId===ids[0],'lost-response retry recovers durable project identity');
+ const result={projectId:ids[0],projectName:'Synthetic project',invitationStatus:'not_sent',warning:'Synthetic failure'};
+ run(auth(A)+`select public.finish_project_creation('${K}','${H}','${JSON.stringify(result)}'::jsonb);`);
+ assert(JSON.parse(run(claim())).result.invitationStatus==='not_sent','partial success response replayed');
+ assert(run(auth(B)+'select count(*) from public.project_creation_requests;')==='0','other administrator cannot read this request');
+ denied(auth(U)+`select public.create_project_bundle_once('${K}','${H}','Foreign','${U}','Synthetic Client','client@example.test',null);`,'client cannot create through wrapper');
+ denied(auth(A)+"update public.project_creation_requests set project_id=null;",'browser cannot clear the durable idempotency record');
+ run(`delete from public.projects where id='${ids[0]}';`);
+ assert(JSON.parse(run(claim())).projectId===ids[0],'explicit project deletion retains request tombstone');
+ run(bundle());assert(run('select count(*) from public.projects;')==='0','old key cannot recreate an explicitly deleted project');
+ run(fs.readFileSync('docs/project-creation-idempotency-rollback.sql','utf8'));
+ assert(run('select count(*) from public.project_creation_requests;')==='1','rollback retains durable request history');
+ assert(run("select to_regprocedure('public.create_project_bundle(text,uuid,text,text,text)') is not null;")==='t','rollback preserves original bundle function');
+ console.log('PROJECT CREATION DATABASE TESTS PASSED');
+}finally{run(`drop database ${database} with(force)`,'postgres');}

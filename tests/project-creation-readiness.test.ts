@@ -1,0 +1,12 @@
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import type {SupabaseClient} from '@supabase/supabase-js';
+import {invitationTrackingReady,projectCreationReady} from '@/lib/project-creation-readiness';
+const rpc=vi.fn(),limit=vi.fn(),network=vi.fn();
+const client={rpc,from:()=>({select:()=>({limit})})} as unknown as SupabaseClient;
+beforeEach(()=>{rpc.mockResolvedValue({data:true});limit.mockResolvedValue({data:[]});vi.stubGlobal('fetch',network);network.mockResolvedValue({ok:true,json:async()=>({paths:Object.fromEntries(['prepare_client_invitation_attempt','finish_client_invitation_delivery','record_client_invitation_sign_in'].map(n=>['/rpc/'+n,{}]))})});});
+afterEach(()=>{vi.unstubAllGlobals();vi.clearAllMocks();});
+it('checks catalog readiness, table visibility, and all cached RPC routes',async()=>expect(await projectCreationReady(client,client)).toBe(true));
+it('rejects missing readiness functions',async()=>{rpc.mockResolvedValue({error:{code:'PGRST202'}});expect(await projectCreationReady(client,client)).toBe(false);expect(network).not.toHaveBeenCalled();});
+it('rejects a missing tracking table',async()=>{limit.mockResolvedValue({error:{code:'PGRST205'}});expect(await invitationTrackingReady(client)).toBe(false);});
+it('rejects incomplete schema-cache routes',async()=>{network.mockResolvedValue({ok:true,json:async()=>({paths:{}})});expect(await invitationTrackingReady(client)).toBe(false);});
+it('fails closed on network timeouts without writes',async()=>{network.mockRejectedValue(new Error('timeout'));expect(await invitationTrackingReady(client)).toBe(false);});

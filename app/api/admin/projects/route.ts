@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
 import { requireApiRole } from '@/lib/auth';
 import { sendTrackedClientInvitation } from '@/lib/client-invitation-tracking';
 import { appUrl, isDemoMode } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { projectCreateSchema } from '@/lib/validation';
+import { projectCreationReady } from '@/lib/project-creation-readiness';
+import { committedProjectResult, type ProjectCreationResult } from '@/lib/project-creation';
 
 export async function POST(request: Request) {
   const viewer = await requireApiRole('admin');
@@ -15,6 +18,29 @@ export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
   const admin = createSupabaseAdminClient();
   if (!supabase || !admin) return NextResponse.json({ error: 'Server database credentials are not configured.' }, { status: 503 });
+  const requestId = request.headers.get('Idempotency-Key');
+  if (!requestId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+    return NextResponse.json({ error: 'A valid project creation request ID is required. Refresh this page before creating a project.' }, { status: 400 });
+  }
+  if (!await projectCreationReady(supabase, admin)) {
+    return NextResponse.json({ error: 'Project creation is temporarily unavailable because its database setup is incomplete. This attempt made no changes. If you retried an earlier request, check Projects for its result.' }, { status: 503 });
+  }
+  const payloadHash = createHash('sha256').update(JSON.stringify(parsed.data)).digest('hex');
+  const claimArgs = { request_id_input: requestId, payload_hash_input: payloadHash };
+  let created: { project_id: string; client_id: string } | null = null;
+  async function completed(result: ProjectCreationResult) {
+    try { await supabase!.rpc('finish_project_creation', { ...claimArgs, result_input: result }); } catch { /* committed IDs remain durable even if response recording fails */ }
+    return NextResponse.json(result, { status: 201 });
+  }
+  try {
+    const { data: claim, error: claimError } = await supabase.rpc('claim_project_creation', claimArgs);
+    if (claimError || !claim) return NextResponse.json({ error: 'This creation request could not be confirmed. Retry the same request or check Projects before starting another.' }, { status: 409 });
+    if (!claim.acquired) {
+      const previous = committedProjectResult(claim.result);
+      if (previous) return NextResponse.json(previous);
+      if (claim.projectId) return NextResponse.json({ projectId: claim.projectId, projectName: parsed.data.projectName, invitationStatus: 'pending', warning: 'This project already exists. Its invitation may still be processing; check its status before resending.' });
+      return NextResponse.json({ error: 'This request is already processing or needs review. Retry this same request to check its result; do not create another project.' }, { status: 409 });
+    }
 
   let clientAuthUserId: string;
   let fullName: string;
@@ -38,9 +64,13 @@ export async function POST(request: Request) {
     invitation = { tokenHash: linkData.properties.hashed_token, issuedAt };
   }
 
-  const { data: bundle, error: bundleError } = await supabase.rpc('create_project_bundle', { project_name_input: parsed.data.projectName, client_auth_user_id_input: clientAuthUserId, client_full_name_input: fullName, client_email_input: email, client_company_input: company || null }).single();
-  if (bundleError || !bundle) return NextResponse.json({ error: 'The project could not be created. No client invitation was sent.' }, { status: 500 });
-  const created = bundle as { project_id: string; client_id: string };
+  const { data: bundle, error: bundleError } = await supabase.rpc('create_project_bundle_once', { ...claimArgs, project_name_input: parsed.data.projectName, client_auth_user_id_input: clientAuthUserId, client_full_name_input: fullName, client_email_input: email, client_company_input: company || null }).single();
+  if (bundleError || !bundle) {
+    const { data: recovered } = await supabase.rpc('claim_project_creation', claimArgs);
+    if (recovered?.projectId) return completed({ projectId: recovered.projectId, projectName: parsed.data.projectName, invitationStatus: 'not_sent', warning: 'Project creation was recovered after a response failure. No invitation was sent; use Resend invitation on this project.' });
+    return NextResponse.json({ error: 'The creation result could not be confirmed. Retry this same request to check the result; do not start another project.' }, { status: 409 });
+  }
+  created = bundle as { project_id: string; client_id: string };
   let crmWarning: string | null = null;
 
   if (parsed.data.client.mode === 'new' && (parsed.data.client.title || parsed.data.client.phone)) {
@@ -54,7 +84,11 @@ export async function POST(request: Request) {
   if (invitation) {
     const delivery = await sendTrackedClientInvitation({ admin, clientId: created.client_id, projectId: created.project_id,
       authUserId: clientAuthUserId, ...invitation, type: 'invite', to: email, clientName: fullName, projectName: parsed.data.projectName });
-    if (!delivery.ok) return NextResponse.json({ projectId: created.project_id, warning: delivery.error }, { status: 201 });
+    if (!delivery.ok) return completed({ projectId: created.project_id, projectName: parsed.data.projectName, invitationStatus: delivery.deliveryState, warning: [delivery.error, crmWarning].filter(Boolean).join(' ') });
   }
-  return NextResponse.json({ projectId: created.project_id, ...(crmWarning ? { warning: crmWarning } : {}) }, { status: 201 });
+  return completed({ projectId: created.project_id, projectName: parsed.data.projectName, invitationStatus: invitation ? 'sent' : 'not_requested', ...(crmWarning ? { warning: crmWarning } : {}) });
+  } catch {
+    if (created) return completed({ projectId: created.project_id, projectName: parsed.data.projectName, invitationStatus: 'unknown', warning: 'The project was created, but invitation delivery could not be confirmed. Check its history before resending.' });
+    return NextResponse.json({ error: 'The creation result could not be confirmed. Retry this same request; do not start another project.' }, { status: 409 });
+  }
 }
